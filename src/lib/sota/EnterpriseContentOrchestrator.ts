@@ -1502,7 +1502,7 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
 
     // ── Phase 7: Built-in Self-Critique Rewrite (gated by Strategy toggles) ──
     const critiqueEnabled = options.enableSelfCritique !== false;
-    const requestedPasses = Math.max(1, Math.min(1, Number(options.maxCritiquePasses) || 1));
+    const requestedPasses = Math.max(1, Math.min(3, Number(options.maxCritiquePasses) || 2));
     if (!critiqueEnabled) {
       this.log('Phase 7: Self-critique disabled by Strategy — skipping LLM rewrite passes.');
     } else if (this.shouldSkipOptionalPhase('Phase 7 self-critique')) {
@@ -1521,7 +1521,7 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
           html,
           contentGaps: gapTargets,
           maxPasses: requestedPasses,
-          minScore: 92,
+          minScore: 94,
           timeoutMs: Math.min(CRITIQUE_TIMEOUT_MS, Math.max(20_000, this.getPipelineRemainingMs() - 75_000)),
         });
 
