@@ -12,6 +12,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 const Status = lazy(() => import("./pages/Status"));
 const Perf = lazy(() => import("./pages/Perf"));
+const SearchConsole = lazy(() => import("./pages/SearchConsole"));
 
 // ═══════════════════════════════════════════════════════════════════
 // ERROR BOUNDARY
@@ -127,6 +128,14 @@ const App = () => (
                   element={
                     <Suspense fallback={<div className="p-8 text-muted-foreground">Loading perf…</div>}>
                       <Perf />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/search-console"
+                  element={
+                    <Suspense fallback={<div className="p-8 text-muted-foreground">Loading…</div>}>
+                      <SearchConsole />
                     </Suspense>
                   }
                 />
