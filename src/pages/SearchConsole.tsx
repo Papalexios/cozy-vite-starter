@@ -131,6 +131,24 @@ export default function SearchConsole() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const connectGSC = useCallback(async () => {
+    const prompt = "Connect Google Search Console using my existing linked connection (open the connection picker, do not start a new OAuth flow).";
+    // Try to ask the Lovable host shell to open the connector picker.
+    try {
+      window.parent?.postMessage(
+        { type: "lovable:connect-connector", connector_id: "google_search_console", prompt },
+        "*",
+      );
+    } catch { /* ignore */ }
+    // Fallback: copy a ready-to-send prompt so the user can paste into chat.
+    try {
+      await navigator.clipboard.writeText(prompt);
+      toast.success("Opening connection picker… Prompt copied to clipboard as a fallback — paste in chat if the picker does not appear.");
+    } catch {
+      toast.message("Open the Lovable chat and send: \"" + prompt + "\"");
+    }
+  }, []);
+
   const cancelRetry = () => {
     if (timerRef.current) window.clearTimeout(timerRef.current);
     timerRef.current = null;
@@ -253,13 +271,19 @@ export default function SearchConsole() {
           {state === "not_configured" ? (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                No Google Search Console connector is linked to this project. If Google's OAuth is rate-limited,
-                wait a few minutes before retrying — your linked connection will be reused automatically once
-                available.
+                No Google Search Console connector is linked to this project. Click below to open the
+                connection picker and reuse an already-linked Google account — no chat message needed.
               </p>
-              <p className="text-sm text-muted-foreground">
-                In the Lovable chat, ask: <em>"Connect Google Search Console using my existing connection."</em>
-                The connection picker will let you pick an already-linked account instead of starting a new OAuth flow.
+              <button
+                onClick={connectGSC}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90"
+              >
+                <Link2 className="w-4 h-4" />
+                Connect Google Search Console
+              </button>
+              <p className="text-xs text-muted-foreground">
+                If Google's OAuth is rate-limited, the picker still lets you reuse any existing linked
+                connection without a new sign-in.
               </p>
             </div>
           ) : (
