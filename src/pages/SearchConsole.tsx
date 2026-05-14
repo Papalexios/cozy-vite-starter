@@ -131,6 +131,24 @@ export default function SearchConsole() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const connectGSC = useCallback(async () => {
+    const prompt = "Connect Google Search Console using my existing linked connection (open the connection picker, do not start a new OAuth flow).";
+    // Try to ask the Lovable host shell to open the connector picker.
+    try {
+      window.parent?.postMessage(
+        { type: "lovable:connect-connector", connector_id: "google_search_console", prompt },
+        "*",
+      );
+    } catch { /* ignore */ }
+    // Fallback: copy a ready-to-send prompt so the user can paste into chat.
+    try {
+      await navigator.clipboard.writeText(prompt);
+      toast.success("Opening connection picker… Prompt copied to clipboard as a fallback — paste in chat if the picker does not appear.");
+    } catch {
+      toast.message("Open the Lovable chat and send: \"" + prompt + "\"");
+    }
+  }, []);
+
   const cancelRetry = () => {
     if (timerRef.current) window.clearTimeout(timerRef.current);
     timerRef.current = null;
