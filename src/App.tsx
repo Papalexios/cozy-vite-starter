@@ -13,6 +13,7 @@ import NotFound from "./pages/NotFound";
 const Status = lazy(() => import("./pages/Status"));
 const Perf = lazy(() => import("./pages/Perf"));
 const SearchConsole = lazy(() => import("./pages/SearchConsole"));
+const DomainVerification = lazy(() => import("./pages/DomainVerification"));
 
 // ═══════════════════════════════════════════════════════════════════
 // ERROR BOUNDARY
