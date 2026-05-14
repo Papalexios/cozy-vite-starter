@@ -82,6 +82,8 @@ import { runBlogPostChecklist, buildMissingSectionsRewritePrompt, type Checklist
 import { extractEntityCandidates } from './EntityGraph';
 import { injectCitedQuotes } from './CitedQuoteInjector';
 import { buildVoiceFingerprintDirective, type AuthorProfile, type VoiceFingerprint } from './AuthorProfiles';
+import { gateReferences } from './AuthoritativeSourceGate';
+import { applyAEO } from './AEOEnhancer';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS & CONFIGURATION
@@ -807,9 +809,14 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
   private async fetchReferences(keyword: string): Promise<Reference[]> {
     try {
       this.log('Gathering high-quality references via Serper...');
-      const refs = await this.referenceService.getTopReferences(keyword, 12);
-      this.log(`References: Found ${refs.length} high-authority sources.`);
-      return refs;
+      const raw = await this.referenceService.getTopReferences(keyword, 18);
+      this.log(`References: Found ${raw.length} candidates. Applying authoritative whitelist + live verification...`);
+      const { kept, rejected } = await gateReferences(raw, { timeoutMs: 6000, concurrency: 6, allowOnCorsFailure: true });
+      if (rejected.length > 0) {
+        this.log(`References: rejected ${rejected.length} (sample: ${rejected.slice(0, 3).map(r => `${r.ref.domain}=${r.reason}`).join(', ')})`);
+      }
+      this.log(`References: ${kept.length} passed whitelist + live-verify gate.`);
+      return kept.slice(0, 12);
     } catch (e) {
       this.warn(`References: Search failed (${e}). Proceeding without references.`);
       return [];
@@ -1495,7 +1502,7 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
 
     // ── Phase 7: Built-in Self-Critique Rewrite (gated by Strategy toggles) ──
     const critiqueEnabled = options.enableSelfCritique !== false;
-    const requestedPasses = Math.max(1, Math.min(1, Number(options.maxCritiquePasses) || 1));
+    const requestedPasses = Math.max(1, Math.min(3, Number(options.maxCritiquePasses) || 2));
     if (!critiqueEnabled) {
       this.log('Phase 7: Self-critique disabled by Strategy — skipping LLM rewrite passes.');
     } else if (this.shouldSkipOptionalPhase('Phase 7 self-critique')) {
@@ -1514,7 +1521,7 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
           html,
           contentGaps: gapTargets,
           maxPasses: requestedPasses,
-          minScore: 92,
+          minScore: 94,
           timeoutMs: Math.min(CRITIQUE_TIMEOUT_MS, Math.max(20_000, this.getPipelineRemainingMs() - 75_000)),
         });
 
@@ -1608,6 +1615,17 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
     html = this.injectReferencesSection(html, references);
     html = this.ensureExternalLinksClickable(html);
     this.log(`Phase 10 ✅ ${references.length} verified sources injected.`);
+
+    // ── Phase 10b: AEO / GEO / AI-Visibility Boost ─────────────────────────
+    // Adds TL;DR + Key Takeaways block, FAQ JSON-LD, and Speakable schema —
+    // the signals ChatGPT, Perplexity, and Google AI Overviews reward.
+    try {
+      const aeo = applyAEO(html, { keyword: options.keyword, title: options.title });
+      html = aeo.html;
+      this.log(`Phase 10b ✅ AEO: tldr=${aeo.injected.tldr} faq=${aeo.injected.faqSchema} speakable=${aeo.injected.speakable}`);
+    } catch (e) {
+      this.warn(`Phase 10b: AEO injection skipped (${e}).`);
+    }
 
     // ── Phase 9: Internal Link Generation & Injection (6–12 links) ─────────
     this.log('Phase 9: Generating & Injecting Internal Links (target: 6-12)...');
