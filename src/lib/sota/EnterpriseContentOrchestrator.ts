@@ -1616,6 +1616,17 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
     html = this.ensureExternalLinksClickable(html);
     this.log(`Phase 10 ✅ ${references.length} verified sources injected.`);
 
+    // ── Phase 10b: AEO / GEO / AI-Visibility Boost ─────────────────────────
+    // Adds TL;DR + Key Takeaways block, FAQ JSON-LD, and Speakable schema —
+    // the signals ChatGPT, Perplexity, and Google AI Overviews reward.
+    try {
+      const aeo = applyAEO(html, { keyword: options.keyword, title: options.title });
+      html = aeo.html;
+      this.log(`Phase 10b ✅ AEO: tldr=${aeo.injected.tldr} faq=${aeo.injected.faqSchema} speakable=${aeo.injected.speakable}`);
+    } catch (e) {
+      this.warn(`Phase 10b: AEO injection skipped (${e}).`);
+    }
+
     // ── Phase 9: Internal Link Generation & Injection (6–12 links) ─────────
     this.log('Phase 9: Generating & Injecting Internal Links (target: 6-12)...');
 
