@@ -351,6 +351,10 @@ export class NeuronWriterService {
   // ─── Find existing query by keyword (fuzzy match) ───────────────────────────
 
   async findQueryByKeyword(projectId: string, keyword: string): Promise<{ success: boolean; query?: NeuronWriterQuery; error?: string }> {
+    return coalesce(`find:${projectId}:${this.normalize(keyword)}`, () => this._findQueryByKeyword(projectId, keyword));
+  }
+
+  private async _findQueryByKeyword(projectId: string, keyword: string): Promise<{ success: boolean; query?: NeuronWriterQuery; error?: string }> {
     const norm = this.normalize(keyword);
     const sessionHit = SESSION_DEDUP_MAP.get(norm);
     if (sessionHit) {
