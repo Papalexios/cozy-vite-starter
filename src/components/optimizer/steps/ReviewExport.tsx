@@ -861,7 +861,10 @@ export function ReviewExport() {
         </div>
       </div>
 
-      {/* Status Indicators */}
+      {/* Publish & Search Console verification */}
+      <PublishVerificationChecklist />
+
+
       <div className="flex flex-wrap gap-2 md:gap-3 text-sm">
         <StatusBadge
           ok={!!hasAiProvider}
