@@ -140,6 +140,14 @@ const App = () => (
                     </Suspense>
                   }
                 />
+                <Route
+                  path="/domain-verification"
+                  element={
+                    <Suspense fallback={<div className="p-8 text-muted-foreground">Loading…</div>}>
+                      <DomainVerification />
+                    </Suspense>
+                  }
+                />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
