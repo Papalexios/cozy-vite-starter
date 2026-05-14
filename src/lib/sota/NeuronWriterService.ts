@@ -401,6 +401,26 @@ export class NeuronWriterService {
   // ─── Create a new query in the project ─────────────────────────────────────
 
   async createQuery(projectId: string, keyword: string): Promise<{ success: boolean; query?: NeuronWriterQuery; error?: string }> {
+    return coalesce(`create:${projectId}:${this.normalize(keyword)}`, async () => {
+      // Re-check caches inside the coalesced section: a parallel caller may have
+      // just created the query, in which case we must NOT call /new-query again.
+      const norm = this.normalize(keyword);
+      const sessionHit = SESSION_DEDUP_MAP.get(norm);
+      if (sessionHit) {
+        this.diag(`createQuery: cache hit (session) for "${keyword}" — reusing ${sessionHit.id}`);
+        return { success: true, query: sessionHit };
+      }
+      const persistentHit = findInPersistentCache(norm);
+      if (persistentHit) {
+        this.diag(`createQuery: cache hit (persistent) for "${keyword}" — reusing ${persistentHit.id}`);
+        SESSION_DEDUP_MAP.set(norm, persistentHit);
+        return { success: true, query: persistentHit };
+      }
+      return this._createQuery(projectId, keyword);
+    });
+  }
+
+  private async _createQuery(projectId: string, keyword: string): Promise<{ success: boolean; query?: NeuronWriterQuery; error?: string }> {
     this.diag(`Creating new NeuronWriter query for "${keyword}" in project ${projectId}...`);
 
     const res = await this.callProxy('/new-query', {
