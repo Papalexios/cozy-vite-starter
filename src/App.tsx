@@ -13,6 +13,7 @@ import NotFound from "./pages/NotFound";
 const Status = lazy(() => import("./pages/Status"));
 const Perf = lazy(() => import("./pages/Perf"));
 const SearchConsole = lazy(() => import("./pages/SearchConsole"));
+const DomainVerification = lazy(() => import("./pages/DomainVerification"));
 
 // ═══════════════════════════════════════════════════════════════════
 // ERROR BOUNDARY
@@ -136,6 +137,14 @@ const App = () => (
                   element={
                     <Suspense fallback={<div className="p-8 text-muted-foreground">Loading…</div>}>
                       <SearchConsole />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/domain-verification"
+                  element={
+                    <Suspense fallback={<div className="p-8 text-muted-foreground">Loading…</div>}>
+                      <DomainVerification />
                     </Suspense>
                   }
                 />

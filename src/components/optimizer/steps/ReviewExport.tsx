@@ -15,6 +15,7 @@ import { useWordPressPublish } from "@/hooks/useWordPressPublish";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import PublishVerificationChecklist from "../PublishVerificationChecklist";
 
 // Helper to reconstruct GeneratedContent from persisted store (minimal shape for viewer)
 function reconstructGeneratedContent(stored: GeneratedContentStore[string] | undefined): GeneratedContent | null {
@@ -860,7 +861,10 @@ export function ReviewExport() {
         </div>
       </div>
 
-      {/* Status Indicators */}
+      {/* Publish & Search Console verification */}
+      <PublishVerificationChecklist />
+
+
       <div className="flex flex-wrap gap-2 md:gap-3 text-sm">
         <StatusBadge
           ok={!!hasAiProvider}
