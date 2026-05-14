@@ -79,10 +79,21 @@ const INITIAL_RETRY_DELAY_MS = 1000;
 const PERSISTENT_CACHE_KEY = 'sota-nw-dedup-cache-v9.0';
 const PROXY_TIMEOUT_MS: Record<string, number> = {
   '/list-projects': 15_000,
-  '/list-queries': 18_000,
-  '/get-query': 20_000,
+  '/list-queries': 20_000,
+  '/get-query': 30_000,
   '/new-query': 45_000,
 };
+
+// Module-level in-flight request coalescing — prevents duplicate /new-query and
+// /list-queries calls when multiple callers (or a re-render) ask concurrently.
+const INFLIGHT_REQUESTS = new Map<string, Promise<any>>();
+function coalesce<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = INFLIGHT_REQUESTS.get(key);
+  if (existing) return existing as Promise<T>;
+  const p = fn().finally(() => INFLIGHT_REQUESTS.delete(key));
+  INFLIGHT_REQUESTS.set(key, p);
+  return p;
+}
 
 function endpointTimeout(endpoint: string): number {
   return PROXY_TIMEOUT_MS[endpoint] ?? 30_000;
