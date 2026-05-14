@@ -466,6 +466,10 @@ export class NeuronWriterService {
   // ─── Get query analysis (full data extraction) ──────────────────────────────
 
   async getQueryAnalysis(queryId: string): Promise<{ success: boolean; analysis?: NeuronWriterAnalysis; error?: string }> {
+    return coalesce(`get:${queryId}`, () => this._getQueryAnalysis(queryId));
+  }
+
+  private async _getQueryAnalysis(queryId: string): Promise<{ success: boolean; analysis?: NeuronWriterAnalysis; error?: string }> {
     this.diag(`Fetching analysis for query ${queryId}...`);
     const res = await this.callProxy('/get-query', { body: { query: queryId } });
     if (!res.success) return res;
