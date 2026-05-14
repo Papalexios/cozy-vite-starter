@@ -82,6 +82,8 @@ import { runBlogPostChecklist, buildMissingSectionsRewritePrompt, type Checklist
 import { extractEntityCandidates } from './EntityGraph';
 import { injectCitedQuotes } from './CitedQuoteInjector';
 import { buildVoiceFingerprintDirective, type AuthorProfile, type VoiceFingerprint } from './AuthorProfiles';
+import { gateReferences } from './AuthoritativeSourceGate';
+import { applyAEO } from './AEOEnhancer';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS & CONFIGURATION
