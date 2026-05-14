@@ -79,10 +79,21 @@ const INITIAL_RETRY_DELAY_MS = 1000;
 const PERSISTENT_CACHE_KEY = 'sota-nw-dedup-cache-v9.0';
 const PROXY_TIMEOUT_MS: Record<string, number> = {
   '/list-projects': 15_000,
-  '/list-queries': 18_000,
-  '/get-query': 20_000,
+  '/list-queries': 20_000,
+  '/get-query': 30_000,
   '/new-query': 45_000,
 };
+
+// Module-level in-flight request coalescing — prevents duplicate /new-query and
+// /list-queries calls when multiple callers (or a re-render) ask concurrently.
+const INFLIGHT_REQUESTS = new Map<string, Promise<any>>();
+function coalesce<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = INFLIGHT_REQUESTS.get(key);
+  if (existing) return existing as Promise<T>;
+  const p = fn().finally(() => INFLIGHT_REQUESTS.delete(key));
+  INFLIGHT_REQUESTS.set(key, p);
+  return p;
+}
 
 function endpointTimeout(endpoint: string): number {
   return PROXY_TIMEOUT_MS[endpoint] ?? 30_000;
@@ -340,6 +351,10 @@ export class NeuronWriterService {
   // ─── Find existing query by keyword (fuzzy match) ───────────────────────────
 
   async findQueryByKeyword(projectId: string, keyword: string): Promise<{ success: boolean; query?: NeuronWriterQuery; error?: string }> {
+    return coalesce(`find:${projectId}:${this.normalize(keyword)}`, () => this._findQueryByKeyword(projectId, keyword));
+  }
+
+  private async _findQueryByKeyword(projectId: string, keyword: string): Promise<{ success: boolean; query?: NeuronWriterQuery; error?: string }> {
     const norm = this.normalize(keyword);
     const sessionHit = SESSION_DEDUP_MAP.get(norm);
     if (sessionHit) {
@@ -386,6 +401,26 @@ export class NeuronWriterService {
   // ─── Create a new query in the project ─────────────────────────────────────
 
   async createQuery(projectId: string, keyword: string): Promise<{ success: boolean; query?: NeuronWriterQuery; error?: string }> {
+    return coalesce(`create:${projectId}:${this.normalize(keyword)}`, async () => {
+      // Re-check caches inside the coalesced section: a parallel caller may have
+      // just created the query, in which case we must NOT call /new-query again.
+      const norm = this.normalize(keyword);
+      const sessionHit = SESSION_DEDUP_MAP.get(norm);
+      if (sessionHit) {
+        this.diag(`createQuery: cache hit (session) for "${keyword}" — reusing ${sessionHit.id}`);
+        return { success: true, query: sessionHit };
+      }
+      const persistentHit = findInPersistentCache(norm);
+      if (persistentHit) {
+        this.diag(`createQuery: cache hit (persistent) for "${keyword}" — reusing ${persistentHit.id}`);
+        SESSION_DEDUP_MAP.set(norm, persistentHit);
+        return { success: true, query: persistentHit };
+      }
+      return this._createQuery(projectId, keyword);
+    });
+  }
+
+  private async _createQuery(projectId: string, keyword: string): Promise<{ success: boolean; query?: NeuronWriterQuery; error?: string }> {
     this.diag(`Creating new NeuronWriter query for "${keyword}" in project ${projectId}...`);
 
     const res = await this.callProxy('/new-query', {
@@ -431,6 +466,10 @@ export class NeuronWriterService {
   // ─── Get query analysis (full data extraction) ──────────────────────────────
 
   async getQueryAnalysis(queryId: string): Promise<{ success: boolean; analysis?: NeuronWriterAnalysis; error?: string }> {
+    return coalesce(`get:${queryId}`, () => this._getQueryAnalysis(queryId));
+  }
+
+  private async _getQueryAnalysis(queryId: string): Promise<{ success: boolean; analysis?: NeuronWriterAnalysis; error?: string }> {
     this.diag(`Fetching analysis for query ${queryId}...`);
     const res = await this.callProxy('/get-query', { body: { query: queryId } });
     if (!res.success) return res;
