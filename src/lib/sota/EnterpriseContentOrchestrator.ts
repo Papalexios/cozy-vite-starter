@@ -809,9 +809,14 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
   private async fetchReferences(keyword: string): Promise<Reference[]> {
     try {
       this.log('Gathering high-quality references via Serper...');
-      const refs = await this.referenceService.getTopReferences(keyword, 12);
-      this.log(`References: Found ${refs.length} high-authority sources.`);
-      return refs;
+      const raw = await this.referenceService.getTopReferences(keyword, 18);
+      this.log(`References: Found ${raw.length} candidates. Applying authoritative whitelist + live verification...`);
+      const { kept, rejected } = await gateReferences(raw, { timeoutMs: 6000, concurrency: 6, allowOnCorsFailure: true });
+      if (rejected.length > 0) {
+        this.log(`References: rejected ${rejected.length} (sample: ${rejected.slice(0, 3).map(r => `${r.ref.domain}=${r.reason}`).join(', ')})`);
+      }
+      this.log(`References: ${kept.length} passed whitelist + live-verify gate.`);
+      return kept.slice(0, 12);
     } catch (e) {
       this.warn(`References: Search failed (${e}). Proceeding without references.`);
       return [];
