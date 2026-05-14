@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabase } from "@/lib/supabaseClient";
 import {
   CheckCircle2, XCircle, Clock, RefreshCw, Send, Link2,
   AlertTriangle, ArrowLeft, Globe, Loader2,
@@ -70,7 +70,9 @@ export default function SearchConsole() {
   }, []);
 
   const callProxy = useCallback(async (action: string, payload: Record<string, unknown> = {}) => {
-    const { data, error } = await supabase.functions.invoke("gsc-proxy", {
+    const client = getSupabase();
+    if (!client) throw new Error("Supabase is not configured. Add credentials in Setup & Config.");
+    const { data, error } = await client.functions.invoke("gsc-proxy", {
       body: { action, ...payload },
     });
     if (error) throw new Error(error.message || "Edge function error");
