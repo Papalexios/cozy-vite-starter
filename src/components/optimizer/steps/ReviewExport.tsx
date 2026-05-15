@@ -3,7 +3,8 @@ import { useOptimizerStore, type ContentItem, type GeneratedContentStore, type N
 import {
   FileText, Check, X, AlertCircle, Trash2,
   Sparkles, ArrowUpDown, Eye, Brain, ArrowRight,
-  CheckCircle, Clock, XCircle, Loader2, Database, Upload
+  CheckCircle, Clock, XCircle, Loader2, Database, Upload,
+  Image as ImageIcon, Tag, Calendar as CalendarIcon, Undo2, ChevronDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createOrchestrator, globalPerformanceTracker, type GeneratedContent, type NeuronWriterAnalysis } from "@/lib/sota";
@@ -12,6 +13,7 @@ import { EnhancedGenerationModal, type GenerationStep } from "../EnhancedGenerat
 import { ContentIntelligenceDashboard } from "../ContentIntelligenceDashboard";
 import { useSupabaseSyncContext } from "@/providers/SupabaseSyncProvider";
 import { useWordPressPublish } from "@/hooks/useWordPressPublish";
+import { rollbackToRevision } from "@/lib/wordpress/rollback";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -234,6 +236,63 @@ export function ReviewExport() {
     postUrl?: string;
   }>>([]);
 
+  // ── Phase 5 — bulk publish overrides (apply to every item in the queue) ──
+  const [showAdvancedPublish, setShowAdvancedPublish] = useState(false);
+  const [pubFeaturedImageUrl, setPubFeaturedImageUrl] = useState('');
+  const [pubFeaturedImageAlt, setPubFeaturedImageAlt] = useState('');
+  const [pubCategoryNames, setPubCategoryNames] = useState('');
+  const [pubTagNames, setPubTagNames] = useState('');
+  const [pubScheduledDate, setPubScheduledDate] = useState(''); // datetime-local value
+  const [pubCanonicalUrl, setPubCanonicalUrl] = useState('');
+
+  // ── Phase 5 — per-row rollback state ──
+  const [rollbackBusyId, setRollbackBusyId] = useState<string | null>(null);
+
+  const handleRollback = useCallback(async (itemId: string) => {
+    const stored = generatedContentsStore[itemId];
+    if (!stored) return;
+    if (!stored.draftId) {
+      toast.error('Rollback unavailable: no Supabase draft history for this item.');
+      return;
+    }
+    if (!stored.publishedPostId) {
+      toast.error('Rollback unavailable: this item has not been published yet.');
+      return;
+    }
+    if (!config.wpUrl || !config.wpUsername || !config.wpAppPassword) {
+      toast.error('WordPress credentials missing. Configure them in Setup first.');
+      return;
+    }
+    if (!confirm('Rollback this post to the previous saved revision? This will overwrite the live WordPress post.')) return;
+
+    setRollbackBusyId(itemId);
+    try {
+      const res = await rollbackToRevision({
+        draftId: stored.draftId,
+        wp: {
+          wpUrl: config.wpUrl,
+          username: config.wpUsername,
+          appPassword: config.wpAppPassword,
+          title: stored.seoTitle || stored.title,
+          existingPostId: stored.publishedPostId,
+          slug: stored.slug,
+        },
+        status: 'publish',
+        metaDescription: stored.metaDescription,
+        seoTitle: stored.seoTitle,
+      });
+      if (res.success) {
+        toast.success(`Rolled back to v${res.restoredVersion}.`);
+      } else {
+        toast.error(`Rollback failed: ${res.error || 'unknown error'}`);
+      }
+    } catch (e) {
+      toast.error(`Rollback error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setRollbackBusyId(null);
+    }
+  }, [generatedContentsStore, config]);
+
   // Count selected completed items that can be published
   const publishableSelected = useMemo(() => {
     return contentItems.filter(
@@ -329,16 +388,43 @@ export function ReviewExport() {
           .replace(/&quot;/g, '"')
           .trim();
 
+        // Phase 5 — bulk overrides + per-item overrides (per-item wins)
+        const itemOverrides = stored.publishOverrides || {};
+        const bulkCategoryNames = pubCategoryNames.split(',').map(s => s.trim()).filter(Boolean);
+        const bulkTagNames = pubTagNames.split(',').map(s => s.trim()).filter(Boolean);
+        const featuredImage = itemOverrides.featuredImage
+          ?? (pubFeaturedImageUrl ? { url: pubFeaturedImageUrl, alt: pubFeaturedImageAlt || cleanTitle } : undefined);
+        const categoryNames = itemOverrides.categoryNames ?? (bulkCategoryNames.length ? bulkCategoryNames : undefined);
+        const tagNames = itemOverrides.tagNames ?? (bulkTagNames.length ? bulkTagNames : undefined);
+        const scheduledDate = itemOverrides.scheduledDate
+          ?? (pubScheduledDate ? new Date(pubScheduledDate).toISOString() : undefined);
+        const canonicalUrl = itemOverrides.canonicalUrl ?? (pubCanonicalUrl || undefined);
+
         const result = await publish(cleanTitle, stored.content, {
-          status: bulkPublishStatus === 'publish' ? 'publish' : 'draft',
+          status: scheduledDate ? 'future' : (bulkPublishStatus === 'publish' ? 'publish' : 'draft'),
           slug: stored.slug,
           metaDescription: stored.metaDescription,
           seoTitle: stored.seoTitle,
           sourceUrl: item.url,
+          existingPostId: stored.publishedPostId,
+          draftId: stored.draftId,
+          featuredImage,
+          categoryNames,
+          tagNames,
+          scheduledDate,
+          canonicalUrl,
+          schemaJson: stored.schema,
         });
 
         if (result.success) {
           successCount++;
+          // Phase 5 — persist publishedPostId so rollback can target it later
+          setGeneratedContent(item.id, {
+            ...stored,
+            publishedPostId: result.postId ?? stored.publishedPostId,
+            publishedPostUrl: result.postUrl ?? stored.publishedPostUrl,
+            publishedAt: new Date().toISOString(),
+          });
           setBulkPublishItems(prev =>
             prev.map((p, idx) => idx === i ? { ...p, status: 'published', postUrl: result.postUrl } : p)
           );
@@ -374,7 +460,7 @@ export function ReviewExport() {
     } else {
       toast.error(`Failed to publish all ${errorCount} posts`);
     }
-  }, [publishableSelected, allPublishable, wpConfigured, generatedContentsStore, publish, bulkPublishStatus]);
+  }, [publishableSelected, allPublishable, wpConfigured, generatedContentsStore, publish, bulkPublishStatus, setGeneratedContent, pubFeaturedImageUrl, pubFeaturedImageAlt, pubCategoryNames, pubTagNames, pubScheduledDate, pubCanonicalUrl]);
 
   const toggleSelect = (id: string) => {
     setSelectedItems(prev =>
@@ -1296,6 +1382,19 @@ export function ReviewExport() {
                       >
                         <Eye className="w-4 h-4" />
                       </button>
+                      {/* Phase 5 — rollback button (only if previously published & has revision history) */}
+                      {stored?.publishedPostId && (
+                        <button
+                          onClick={() => handleRollback(item.id)}
+                          disabled={rollbackBusyId === item.id}
+                          className="p-1.5 text-amber-400/80 hover:text-amber-300 hover:bg-amber-500/10 rounded transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={stored.draftId ? "Rollback to previous revision" : "Rollback unavailable — no Supabase draft history"}
+                        >
+                          {rollbackBusyId === item.id
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : <Undo2 className="w-4 h-4" />}
+                        </button>
+                      )}
                       <button
                         onClick={() => removeContentItem(item.id)}
                         className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-all"
@@ -1425,6 +1524,104 @@ export function ReviewExport() {
                         🚀 Publish Live
                       </button>
                     </div>
+                  </div>
+
+                  {/* ── Phase 5 — Advanced Publish Options ── */}
+                  <div className="bg-black/20 border border-white/10 rounded-2xl overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedPublish(v => !v)}
+                      className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-white/5 transition-colors"
+                    >
+                      <span className="flex items-center gap-2 text-sm font-bold text-zinc-300">
+                        <Sparkles className="w-4 h-4 text-emerald-400" />
+                        Advanced Publish Options
+                        <span className="text-xs font-normal text-zinc-500 ml-1">(applies to all in queue)</span>
+                      </span>
+                      <ChevronDown className={cn("w-4 h-4 text-zinc-400 transition-transform", showAdvancedPublish && "rotate-180")} />
+                    </button>
+
+                    {showAdvancedPublish && (
+                      <div className="px-5 pb-5 space-y-4 border-t border-white/5">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-4">
+                          <div className="md:col-span-2">
+                            <label className="text-xs font-bold text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                              <ImageIcon className="w-3.5 h-3.5" /> Featured image URL
+                            </label>
+                            <input
+                              type="url"
+                              value={pubFeaturedImageUrl}
+                              onChange={(e) => setPubFeaturedImageUrl(e.target.value)}
+                              placeholder="https://example.com/image.jpg"
+                              className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/40"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-400 mb-1.5">Alt text</label>
+                            <input
+                              type="text"
+                              value={pubFeaturedImageAlt}
+                              onChange={(e) => setPubFeaturedImageAlt(e.target.value)}
+                              placeholder="Describe the image"
+                              className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/40"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs font-bold text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                              <Tag className="w-3.5 h-3.5" /> Categories (comma-separated)
+                            </label>
+                            <input
+                              type="text"
+                              value={pubCategoryNames}
+                              onChange={(e) => setPubCategoryNames(e.target.value)}
+                              placeholder="SEO, Content Marketing"
+                              className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/40"
+                            />
+                            <p className="text-[10px] text-zinc-600 mt-1">Created in WordPress if they don't exist.</p>
+                          </div>
+                          <div>
+                            <label className="text-xs font-bold text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                              <Tag className="w-3.5 h-3.5" /> Tags (comma-separated)
+                            </label>
+                            <input
+                              type="text"
+                              value={pubTagNames}
+                              onChange={(e) => setPubTagNames(e.target.value)}
+                              placeholder="long-form, e-e-a-t"
+                              className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/40"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs font-bold text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                              <CalendarIcon className="w-3.5 h-3.5" /> Schedule (local time)
+                            </label>
+                            <input
+                              type="datetime-local"
+                              value={pubScheduledDate}
+                              onChange={(e) => setPubScheduledDate(e.target.value)}
+                              className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/40"
+                            />
+                            <p className="text-[10px] text-zinc-600 mt-1">If set, status forced to <code>future</code>.</p>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-400 mb-1.5">Canonical URL (optional)</label>
+                            <input
+                              type="url"
+                              value={pubCanonicalUrl}
+                              onChange={(e) => setPubCanonicalUrl(e.target.value)}
+                              placeholder="https://yoursite.com/post-slug/"
+                              className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/40"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="p-5 bg-black/20 border border-white/10 rounded-2xl">
