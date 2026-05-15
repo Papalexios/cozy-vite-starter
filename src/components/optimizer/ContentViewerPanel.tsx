@@ -596,7 +596,7 @@ export function ContentViewerPanel({
             {/* ────── PREVIEW TAB ────── */}
             {activeTab === 'preview' && (
               <div className="p-8">
-                <div className="flex items-center justify-center mb-8">
+                <div className="flex flex-col items-center gap-3 mb-8">
                   <div className="inline-flex items-center gap-3 px-4 py-2 bg-white/5 rounded-full border border-white/5 backdrop-blur-sm">
                     <Globe className="w-4 h-4 text-zinc-400" />
                     <span className="text-sm font-medium text-zinc-300">WordPress Preview Mode</span>
@@ -605,8 +605,36 @@ export function ContentViewerPanel({
                         <Edit3 className="w-3 h-3" /> Modified
                       </span>
                     )}
+                    {factCheckCounts && (
+                      <button
+                        type="button"
+                        onClick={() => setShowFactCheck(v => !v)}
+                        title={showFactCheck ? 'Hide fact-check highlights' : 'Show fact-check highlights'}
+                        className={cn(
+                          "flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg border transition-colors ml-2",
+                          showFactCheck
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20"
+                            : "bg-white/5 text-zinc-400 border-white/10 hover:bg-white/10"
+                        )}
+                      >
+                        <Shield className="w-3 h-3" />
+                        Fact-check {showFactCheck ? 'On' : 'Off'}
+                        {factCheckCounts.hasFlags && (
+                          <span className="px-1.5 py-px rounded-full bg-red-500/20 text-red-300 ml-1">{factCheckCounts.flagged} flagged</span>
+                        )}
+                      </button>
+                    )}
                   </div>
+                  {factCheckCounts && showFactCheck && (
+                    <div className="inline-flex items-center gap-3 px-3 py-1.5 rounded-full bg-black/20 border border-white/5 text-[11px] text-zinc-400">
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/60 border-b-2 border-emerald-500" /> Verified ({factCheckCounts.verified})</span>
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-red-500/60 border-b-2 border-red-500" /> Unverified ({factCheckCounts.unverified + factCheckCounts.insufficient})</span>
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500/60 border-b-2 border-amber-500" /> Stale ({factCheckCounts.stale})</span>
+                      <span className="text-zinc-500">Hover a highlight for sources</span>
+                    </div>
+                  )}
                 </div>
+
 
                 <div className="bg-white rounded-2xl shadow-2xl overflow-hidden max-w-5xl mx-auto ring-8 ring-black/20">
                   <div className="bg-gray-100 px-4 py-3 text-sm text-gray-500 border-b flex items-center gap-4">
