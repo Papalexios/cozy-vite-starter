@@ -264,6 +264,23 @@ export function ReviewExport() {
     return blocked;
   }, [allPublishable, generatedContentsStore]);
 
+  // Items blocked because the YMYL fact-check publish gate failed (Phase 4).
+  const factCheckBlocked = useMemo(() => {
+    const blocked: Array<{ id: string; title: string; flagged: number; reasons: string[] }> = [];
+    for (const item of allPublishable) {
+      const fc = generatedContentsStore[item.id]?.factCheckV2;
+      if (fc && !fc.publishAllowed) {
+        blocked.push({
+          id: item.id,
+          title: item.title,
+          flagged: fc.summary.flagged,
+          reasons: fc.blockingReasons,
+        });
+      }
+    }
+    return blocked;
+  }, [allPublishable, generatedContentsStore]);
+
   const [showChecklistReport, setShowChecklistReport] = useState<string | null>(null);
 
   const handleBulkPublish = useCallback(async () => {
