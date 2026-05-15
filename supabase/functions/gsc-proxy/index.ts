@@ -6,9 +6,18 @@ const GATEWAY_URL = 'https://connector-gateway.lovable.dev/google_search_console
 const VERIFY_URL = 'https://connector-gateway.lovable.dev/api/v1/verify_credentials';
 
 interface Body {
-  action: 'status' | 'listSites' | 'submitSitemap' | 'listSitemaps';
+  action: 'status' | 'listSites' | 'submitSitemap' | 'listSitemaps' | 'searchAnalytics';
   siteUrl?: string;
   feedpath?: string;
+  // searchAnalytics params (mirrors Google's API body)
+  startDate?: string;        // 'YYYY-MM-DD'
+  endDate?: string;          // 'YYYY-MM-DD'
+  dimensions?: Array<'query' | 'page' | 'date' | 'country' | 'device' | 'searchAppearance'>;
+  rowLimit?: number;         // max 25000 per call
+  startRow?: number;
+  searchType?: 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews';
+  dataState?: 'all' | 'final';
+  dimensionFilterGroups?: unknown;
 }
 
 function json(data: unknown, status = 200) {
@@ -90,6 +99,38 @@ Deno.serve(async (req) => {
       const data = await r.json().catch(() => ({}));
       if (!r.ok) return json({ error: data?.message || `HTTP ${r.status}` }, r.status);
       return json({ sitemaps: data?.sitemap || [] });
+    }
+
+    if (body.action === 'searchAnalytics') {
+      if (!body.siteUrl || !body.startDate || !body.endDate) {
+        return json({ error: 'siteUrl, startDate, endDate required' }, 400);
+      }
+      const site = encodeURIComponent(body.siteUrl);
+      const payload = {
+        startDate: body.startDate,
+        endDate: body.endDate,
+        dimensions: body.dimensions ?? ['query', 'page'],
+        rowLimit: Math.min(Math.max(body.rowLimit ?? 5000, 1), 25000),
+        startRow: body.startRow ?? 0,
+        searchType: body.searchType ?? 'web',
+        dataState: body.dataState ?? 'final',
+        ...(body.dimensionFilterGroups ? { dimensionFilterGroups: body.dimensionFilterGroups } : {}),
+      };
+      const r = await fetch(
+        `${GATEWAY_URL}/webmasters/v3/sites/${site}/searchAnalytics/query`,
+        { method: 'POST', headers, body: JSON.stringify(payload) },
+      );
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        return json({
+          error: (data as { message?: string })?.message || `HTTP ${r.status}`,
+          rateLimited: r.status === 429,
+        }, r.status);
+      }
+      return json({
+        rows: (data as { rows?: unknown[] })?.rows || [],
+        responseAggregationType: (data as { responseAggregationType?: string })?.responseAggregationType,
+      });
     }
 
     return json({ error: 'Unknown action' }, 400);
