@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useOptimizerStore } from '@/lib/store';
 import { getSupabaseClient, getSupabaseConfig } from '@/lib/supabaseClient';
+import { recordPublish } from '@/lib/db/contentMemory';
 
 interface PublishResult {
   success: boolean;
@@ -25,6 +26,9 @@ export function useWordPressPublish() {
       seoTitle?: string;
       sourceUrl?: string;
       existingPostId?: number;
+      /** Phase 1 content-memory linkage (optional, no-op if Supabase not configured). */
+      draftId?: string;
+      siteId?: string;
     }
   ): Promise<PublishResult> => {
     setIsPublishing(true);
@@ -270,6 +274,19 @@ export function useWordPressPublish() {
         postUrl: (post?.url || post?.link) as string | undefined,
       };
 
+      // Phase 1: best-effort persistence to content memory
+      if (options?.draftId && options?.siteId) {
+        recordPublish({
+          draft_id: options.draftId,
+          site_id: options.siteId,
+          status: 'success',
+          wp_post_id: result.postId ?? null,
+          wp_url: result.postUrl ?? null,
+          response: data,
+          html: content,
+        }).catch((e) => console.warn('[ContentMemory] recordPublish failed:', e));
+      }
+
       setPublishResult(result);
       return result;
 
@@ -279,6 +296,14 @@ export function useWordPressPublish() {
         success: false,
         error: errorMsg,
       };
+      if (options?.draftId && options?.siteId) {
+        recordPublish({
+          draft_id: options.draftId,
+          site_id: options.siteId,
+          status: 'error',
+          error: errorMsg,
+        }).catch((e) => console.warn('[ContentMemory] recordPublish (error) failed:', e));
+      }
       setPublishResult(result);
       return result;
     } finally {
