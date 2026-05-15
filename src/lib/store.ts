@@ -96,6 +96,20 @@ export interface GeneratedContentStore {
     neuronWriterQueryId?: string;
     generatedAt: string;
     model: string;
+    /** Phase 5 — populated after a successful WordPress publish. Enables rollback. */
+    publishedPostId?: number;
+    publishedPostUrl?: string;
+    publishedAt?: string;
+    /** Phase 1 draft id (if Supabase content-memory is wired). Required for rollback. */
+    draftId?: string;
+    /** Phase 5 — per-item publish overrides (featured image, terms, schedule). */
+    publishOverrides?: {
+      featuredImage?: { url: string; alt?: string; caption?: string };
+      categoryNames?: string[];
+      tagNames?: string[];
+      scheduledDate?: string;
+      canonicalUrl?: string;
+    };
     /** Pre-publish checklist results (populated after generation). */
     checklist?: {
       passed: boolean;
