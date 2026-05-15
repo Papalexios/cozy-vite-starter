@@ -121,7 +121,7 @@ class BrowserJobWorker {
         return;
       }
       const finalProgress = await handler(job, ctx);
-      await JobQueue.complete(job.id, finalProgress ?? this.lastProgress);
+      await JobQueue.complete(job.id, finalProgress || this.lastProgress);
     } catch (err) {
       if (err instanceof CancelledError) {
         // Mark explicitly cancelled (don't retry).
