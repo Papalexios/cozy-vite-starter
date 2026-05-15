@@ -1416,8 +1416,13 @@ export function ReviewExport() {
 
       {/* Analytics Dashboard */}
       {showAnalytics && (
-        <div className="bg-card border border-border rounded-2xl p-6">
-          <ContentIntelligenceDashboard />
+        <div className="space-y-4">
+          <div className="bg-card border border-border rounded-2xl p-6">
+            <ContentIntelligenceDashboard />
+          </div>
+          <div className="bg-card border border-border rounded-2xl p-6">
+            <PerformanceFeedbackPanel />
+          </div>
         </div>
       )}
 
