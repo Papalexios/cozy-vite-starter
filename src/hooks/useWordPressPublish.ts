@@ -20,7 +20,7 @@ export function useWordPressPublish() {
     content: string,
     options?: {
       excerpt?: string;
-      status?: 'draft' | 'publish' | 'pending' | 'private';
+      status?: 'draft' | 'publish' | 'pending' | 'private' | 'future';
       slug?: string;
       metaDescription?: string;
       seoTitle?: string;
@@ -29,6 +29,16 @@ export function useWordPressPublish() {
       /** Phase 1 content-memory linkage (optional, no-op if Supabase not configured). */
       draftId?: string;
       siteId?: string;
+      /** Phase 5 — extended publish features. */
+      categories?: number[];
+      tags?: number[];
+      categoryNames?: string[];
+      tagNames?: string[];
+      authorId?: number;
+      canonicalUrl?: string;
+      schemaJson?: unknown;
+      featuredImage?: { url: string; alt?: string; caption?: string; title?: string; filename?: string };
+      scheduledDate?: string;
     }
   ): Promise<PublishResult> => {
     setIsPublishing(true);
@@ -58,13 +68,24 @@ export function useWordPressPublish() {
         title,
         content,
         excerpt: options?.excerpt,
-        status: options?.status || 'draft',
+        status: options?.status || (options?.scheduledDate ? 'future' : 'draft'),
         slug: safeSlug,
         metaDescription: options?.metaDescription,
         seoTitle: options?.seoTitle,
         sourceUrl: options?.sourceUrl,
         existingPostId: options?.existingPostId,
+        // Phase 5 fields:
+        categories: options?.categories,
+        tags: options?.tags,
+        categoryNames: options?.categoryNames,
+        tagNames: options?.tagNames,
+        authorId: options?.authorId,
+        canonicalUrl: options?.canonicalUrl,
+        schemaJson: options?.schemaJson,
+        featuredImage: options?.featuredImage,
+        scheduledDate: options?.scheduledDate,
       };
+
 
       // ===== Strategy 1: Try local/Cloudflare proxy first (only if it returns JSON) =====
       try {
