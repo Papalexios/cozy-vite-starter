@@ -307,6 +307,15 @@ export function useWordPressPublish() {
           response: data,
           html: content,
         }).catch((e) => console.warn('[ContentMemory] recordPublish failed:', e));
+
+        // Phase 6: capture pre-publish baseline so we can compute ROI later.
+        if (result.postUrl) {
+          captureBaseline({
+            draft_id: options.draftId,
+            site_id: options.siteId,
+            page_url: result.postUrl,
+          }).catch((e) => console.warn('[Feedback] captureBaseline failed:', e));
+        }
       }
 
       setPublishResult(result);
