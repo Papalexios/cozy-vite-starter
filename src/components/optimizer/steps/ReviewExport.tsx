@@ -268,14 +268,18 @@ export function ReviewExport() {
 
   const handleBulkPublish = useCallback(async () => {
     const candidates = publishableSelected.length > 0 ? publishableSelected : allPublishable;
-    // PRE-PUBLISH GATE: block items whose checklist failed.
+    // PRE-PUBLISH GATE: block items whose checklist failed OR YMYL fact-check denied publish.
     const itemsToPublish = candidates.filter(item => {
-      const cl = generatedContentsStore[item.id]?.checklist;
-      return !cl || cl.passed;
+      const stored = generatedContentsStore[item.id];
+      const cl = stored?.checklist;
+      const fc = stored?.factCheckV2;
+      if (cl && !cl.passed) return false;
+      if (fc && !fc.publishAllowed) return false;
+      return true;
     });
     const blocked = candidates.length - itemsToPublish.length;
     if (blocked > 0) {
-      toast.error(`${blocked} post(s) blocked: pre-publish checklist failed. Open the row's checklist to see what's missing.`);
+      toast.error(`${blocked} post(s) blocked: pre-publish checklist or YMYL fact-check failed. Open the row to see what's missing.`);
     }
     if (itemsToPublish.length === 0 || !wpConfigured) return;
 
