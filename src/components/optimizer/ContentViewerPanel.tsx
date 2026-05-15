@@ -80,6 +80,7 @@ interface ContentViewerPanelProps {
   item: ContentItem | null;
   generatedContent?: GeneratedContent | null;
   neuronData?: NeuronWriterAnalysis | null;
+  factCheckV2?: FactCheckV2 | null;
   onClose: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
@@ -89,6 +90,38 @@ interface ContentViewerPanelProps {
 }
 
 type ViewTab = 'preview' | 'editor' | 'html' | 'seo' | 'links' | 'schema' | 'neuron';
+
+// ─── Fact-check inline highlighter ──────────────────────────────────
+function annotateClaimsInHtml(html: string, claims: FactCheckClaim[]): string {
+  if (!html || !claims?.length) return html;
+  let out = html;
+  // Process longer claims first so shorter substrings don't pre-empt them.
+  const sorted = [...claims].sort((a, b) => b.claim.text.length - a.claim.text.length);
+  for (const c of sorted) {
+    if (c.status === 'skipped') continue;
+    const raw = (c.claim.text || '').trim();
+    if (raw.length < 20) continue;
+    if (/[<>]/.test(raw)) continue;
+    // Use the first ~140 chars as the search needle; collapse whitespace.
+    const needle = raw.slice(0, 140).replace(/\s+/g, ' ');
+    const escaped = needle
+      .replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
+      .replace(/\s+/g, '\\s+');
+    let re: RegExp;
+    try { re = new RegExp(`(${escaped})`, 'i'); } catch { continue; }
+    if (!re.test(out)) continue;
+    const evidenceCount = c.evidence?.length || 0;
+    const tipParts = [c.status.toUpperCase()];
+    if (c.reason) tipParts.push(c.reason);
+    if (evidenceCount) tipParts.push(`${evidenceCount} source${evidenceCount > 1 ? 's' : ''}`);
+    const title = tipParts.join(' — ').replace(/"/g, '&quot;');
+    out = out.replace(
+      re,
+      `<mark class="fc-claim fc-${c.status}" data-claim-id="${c.claim.id}" data-status="${c.status}" title="${title}">$1</mark>`,
+    );
+  }
+  return out;
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
