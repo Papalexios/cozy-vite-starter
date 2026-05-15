@@ -388,16 +388,43 @@ export function ReviewExport() {
           .replace(/&quot;/g, '"')
           .trim();
 
+        // Phase 5 — bulk overrides + per-item overrides (per-item wins)
+        const itemOverrides = stored.publishOverrides || {};
+        const bulkCategoryNames = pubCategoryNames.split(',').map(s => s.trim()).filter(Boolean);
+        const bulkTagNames = pubTagNames.split(',').map(s => s.trim()).filter(Boolean);
+        const featuredImage = itemOverrides.featuredImage
+          ?? (pubFeaturedImageUrl ? { url: pubFeaturedImageUrl, alt: pubFeaturedImageAlt || cleanTitle } : undefined);
+        const categoryNames = itemOverrides.categoryNames ?? (bulkCategoryNames.length ? bulkCategoryNames : undefined);
+        const tagNames = itemOverrides.tagNames ?? (bulkTagNames.length ? bulkTagNames : undefined);
+        const scheduledDate = itemOverrides.scheduledDate
+          ?? (pubScheduledDate ? new Date(pubScheduledDate).toISOString() : undefined);
+        const canonicalUrl = itemOverrides.canonicalUrl ?? (pubCanonicalUrl || undefined);
+
         const result = await publish(cleanTitle, stored.content, {
-          status: bulkPublishStatus === 'publish' ? 'publish' : 'draft',
+          status: scheduledDate ? 'future' : (bulkPublishStatus === 'publish' ? 'publish' : 'draft'),
           slug: stored.slug,
           metaDescription: stored.metaDescription,
           seoTitle: stored.seoTitle,
           sourceUrl: item.url,
+          existingPostId: stored.publishedPostId,
+          draftId: stored.draftId,
+          featuredImage,
+          categoryNames,
+          tagNames,
+          scheduledDate,
+          canonicalUrl,
+          schemaJson: stored.schema,
         });
 
         if (result.success) {
           successCount++;
+          // Phase 5 — persist publishedPostId so rollback can target it later
+          setGeneratedContent(item.id, {
+            ...stored,
+            publishedPostId: result.postId ?? stored.publishedPostId,
+            publishedPostUrl: result.postUrl ?? stored.publishedPostUrl,
+            publishedAt: new Date().toISOString(),
+          });
           setBulkPublishItems(prev =>
             prev.map((p, idx) => idx === i ? { ...p, status: 'published', postUrl: result.postUrl } : p)
           );
