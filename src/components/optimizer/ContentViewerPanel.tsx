@@ -195,6 +195,19 @@ export function ContentViewerPanel({
   // ─── Effective display content (edited or original) ────────────────
   const displayContent = isEditorDirty ? editedContent : content;
 
+  // Fact-check overlay: counts + annotated HTML for the preview pane.
+  const factCheckCounts = useMemo(() => {
+    if (!factCheckV2) return null;
+    const s = factCheckV2.summary;
+    return { ...s, hasFlags: s.flagged > 0 };
+  }, [factCheckV2]);
+
+  const annotatedPreview = useMemo(() => {
+    const sanitized = sanitizeHtml(displayContent);
+    if (!showFactCheck || !factCheckV2?.claims?.length) return sanitized;
+    return annotateClaimsInHtml(sanitized, factCheckV2.claims);
+  }, [displayContent, showFactCheck, factCheckV2]);
+
   // Derive effective NeuronWriter data — fallback to generatedContent.neuronWriterAnalysis if prop is null
   const effectiveNeuronData = useMemo(() => {
     if (neuronData) return neuronData;
