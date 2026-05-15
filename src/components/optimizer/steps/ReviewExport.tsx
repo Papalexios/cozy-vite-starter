@@ -1624,7 +1624,9 @@ export function ReviewExport() {
                     )}
                   </div>
 
-
+                  <div className="p-5 bg-black/20 border border-white/10 rounded-2xl">
+                    <h4 className="text-sm font-bold text-zinc-300 mb-4 flex items-center justify-between">
+                      <span>Publishing Queue</span>
                       <span className="text-xs font-normal text-zinc-500">{(publishableSelected.length > 0 ? publishableSelected : allPublishable).length} items</span>
                     </h4>
                     <ul className="text-sm text-zinc-400 space-y-3 max-h-48 overflow-y-auto custom-scrollbar pr-2">
