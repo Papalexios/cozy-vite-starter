@@ -264,18 +264,39 @@ export function ReviewExport() {
     return blocked;
   }, [allPublishable, generatedContentsStore]);
 
+  // Items blocked because the YMYL fact-check publish gate failed (Phase 4).
+  const factCheckBlocked = useMemo(() => {
+    const blocked: Array<{ id: string; title: string; flagged: number; reasons: string[] }> = [];
+    for (const item of allPublishable) {
+      const fc = generatedContentsStore[item.id]?.factCheckV2;
+      if (fc && !fc.publishAllowed) {
+        blocked.push({
+          id: item.id,
+          title: item.title,
+          flagged: fc.summary.flagged,
+          reasons: fc.blockingReasons,
+        });
+      }
+    }
+    return blocked;
+  }, [allPublishable, generatedContentsStore]);
+
   const [showChecklistReport, setShowChecklistReport] = useState<string | null>(null);
 
   const handleBulkPublish = useCallback(async () => {
     const candidates = publishableSelected.length > 0 ? publishableSelected : allPublishable;
-    // PRE-PUBLISH GATE: block items whose checklist failed.
+    // PRE-PUBLISH GATE: block items whose checklist failed OR YMYL fact-check denied publish.
     const itemsToPublish = candidates.filter(item => {
-      const cl = generatedContentsStore[item.id]?.checklist;
-      return !cl || cl.passed;
+      const stored = generatedContentsStore[item.id];
+      const cl = stored?.checklist;
+      const fc = stored?.factCheckV2;
+      if (cl && !cl.passed) return false;
+      if (fc && !fc.publishAllowed) return false;
+      return true;
     });
     const blocked = candidates.length - itemsToPublish.length;
     if (blocked > 0) {
-      toast.error(`${blocked} post(s) blocked: pre-publish checklist failed. Open the row's checklist to see what's missing.`);
+      toast.error(`${blocked} post(s) blocked: pre-publish checklist or YMYL fact-check failed. Open the row to see what's missing.`);
     }
     if (itemsToPublish.length === 0 || !wpConfigured) return;
 
@@ -670,6 +691,13 @@ export function ReviewExport() {
             score: result.checklist.score,
             items: result.checklist.items,
           } : undefined,
+          factCheckV2: (result as any).factCheckV2 ? {
+            ymyl: (result as any).factCheckV2.ymyl,
+            summary: (result as any).factCheckV2.summary,
+            publishAllowed: (result as any).factCheckV2.publishAllowed,
+            blockingReasons: (result as any).factCheckV2.blockingReasons,
+            claims: (result as any).factCheckV2.claims,
+          } : undefined,
         };
 
         // Store the generated content in persisted store (survives navigation)
@@ -928,6 +956,32 @@ export function ReviewExport() {
             <div className="bg-black/30 rounded-lg p-3 border border-red-500/20 font-mono text-xs text-red-300">
               supabase/migrations/001_create_blog_posts_table.sql
             </div>
+          </div>
+        </div>
+      )}
+
+      {factCheckBlocked.length > 0 && (
+        <div className="glass-card border border-amber-500/30 bg-amber-500/10 p-5 rounded-2xl flex items-start gap-4">
+          <div className="p-2 bg-amber-500/20 rounded-lg">
+            <Database className="w-6 h-6 text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-amber-300 text-lg mb-1">
+              YMYL Fact-Check Gate — {factCheckBlocked.length} post{factCheckBlocked.length === 1 ? '' : 's'} blocked
+            </h3>
+            <p className="text-amber-200/80 text-sm mb-2">
+              These articles contain unverified factual claims in YMYL (health/finance/legal/safety) territory. Resolve flagged claims before publishing.
+            </p>
+            <ul className="text-amber-200/90 text-xs space-y-1 max-h-32 overflow-auto">
+              {factCheckBlocked.slice(0, 5).map((b) => (
+                <li key={b.id} className="truncate">
+                  • <span className="font-semibold">{b.title}</span> — {b.flagged} flagged claim{b.flagged === 1 ? '' : 's'}
+                </li>
+              ))}
+              {factCheckBlocked.length > 5 && (
+                <li className="text-amber-200/60">…and {factCheckBlocked.length - 5} more</li>
+              )}
+            </ul>
           </div>
         </div>
       )}

@@ -84,6 +84,7 @@ import { injectCitedQuotes } from './CitedQuoteInjector';
 import { buildVoiceFingerprintDirective, type AuthorProfile, type VoiceFingerprint } from './AuthorProfiles';
 import { gateReferences } from './AuthoritativeSourceGate';
 import { applyAEO } from './AEOEnhancer';
+import { runFactCheck, type FactCheckPipelineResult, type CandidateEvidence } from './factcheck';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS & CONFIGURATION
@@ -1763,6 +1764,60 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
       }
     }
 
+    // ── Phase 11b: Structured Fact-Check & YMYL Publish Gate ────────────────
+    let factCheckV2: FactCheckPipelineResult | undefined;
+    if (this.shouldSkipOptionalPhase('Phase 11b structured fact-check', 30_000)) {
+      this.warn('Phase 11b: Skipped — runtime budget nearly exhausted.');
+    } else {
+      try {
+        this.log('Phase 11b: Structured fact-check (atomic claim extraction + evidence binding)...');
+        const t0 = Date.now();
+        const candidatePool: Omit<CandidateEvidence, 'claimId'>[] = (references || [])
+          .slice(0, 8)
+          .map((r) => ({ url: r.url, title: r.title }));
+        factCheckV2 = await this.withTimeout(
+          'Phase 11b structured fact-check',
+          runFactCheck({
+            html,
+            primaryKeyword: options.keyword,
+            secondaryKeywords: (neuron?.analysis?.terms || []).slice(0, 5).map((t: any) => t.term),
+            generator: async (system, user) => {
+              const r = await this.engine.generateWithModel({
+                prompt: user,
+                systemPrompt: system,
+                model: (options.model || this.config.primaryModel || 'gemini'),
+                apiKeys: this.config.apiKeys,
+                temperature: 0.1,
+                maxTokens: 3000,
+                timeoutMs: 25_000,
+                maxRetries: 0,
+                allowContinuations: false,
+                allowResume: false,
+              });
+              return r.content;
+            },
+            // Pool reuse: every factual claim shares the gathered authoritative refs.
+            resolveCandidates: async (claim) =>
+              candidatePool.map((c) => ({ ...c, claimId: claim.id })),
+            maxClaims: 40,
+          }),
+          45_000,
+          undefined,
+        );
+        if (factCheckV2) {
+          this.log(
+            `Phase 11b ✅ ${factCheckV2.summary.verified}/${factCheckV2.summary.factualClaims} factual claims verified` +
+            ` (YMYL=${factCheckV2.ymyl.isYmyl}, flagged=${factCheckV2.summary.flagged}) in ${Math.round((Date.now() - t0) / 1000)}s.`
+          );
+          if (!factCheckV2.publishAllowed) {
+            this.warn(`Phase 11b ⚠ Publish gate: ${factCheckV2.blockingReasons.join(' | ')}`);
+          }
+        }
+      } catch (e) {
+        this.warn(`Phase 11b: Structured fact-check failed (${e instanceof Error ? e.message : e}). Continuing without gate.`);
+      }
+    }
+
     this.log('✅ All phases complete. Assembling final result...');
 
     const wordCount = html.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
@@ -1837,6 +1892,7 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
       references,
       telemetry: this.telemetry,
       checklist,
+      factCheckV2,
     } as any;
   }
 }
