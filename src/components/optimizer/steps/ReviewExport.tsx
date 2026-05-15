@@ -11,6 +11,7 @@ import { createOrchestrator, globalPerformanceTracker, type GeneratedContent, ty
 import { ContentViewerPanel } from "../ContentViewerPanel";
 import { EnhancedGenerationModal, type GenerationStep } from "../EnhancedGenerationModal";
 import { ContentIntelligenceDashboard } from "../ContentIntelligenceDashboard";
+import { PerformanceFeedbackPanel } from "../PerformanceFeedbackPanel";
 import { useSupabaseSyncContext } from "@/providers/SupabaseSyncProvider";
 import { useWordPressPublish } from "@/hooks/useWordPressPublish";
 import { rollbackToRevision } from "@/lib/wordpress/rollback";
