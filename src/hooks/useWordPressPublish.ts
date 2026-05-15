@@ -26,6 +26,9 @@ export function useWordPressPublish() {
       seoTitle?: string;
       sourceUrl?: string;
       existingPostId?: number;
+      /** Phase 1 content-memory linkage (optional, no-op if Supabase not configured). */
+      draftId?: string;
+      siteId?: string;
     }
   ): Promise<PublishResult> => {
     setIsPublishing(true);
