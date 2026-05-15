@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useOptimizerStore } from '@/lib/store';
 import { getSupabaseClient, getSupabaseConfig } from '@/lib/supabaseClient';
 import { recordPublish } from '@/lib/db/contentMemory';
+import { captureBaseline } from '@/lib/feedback';
 
 interface PublishResult {
   success: boolean;
