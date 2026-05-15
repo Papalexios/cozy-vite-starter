@@ -960,6 +960,32 @@ export function ReviewExport() {
         </div>
       )}
 
+      {factCheckBlocked.length > 0 && (
+        <div className="glass-card border border-amber-500/30 bg-amber-500/10 p-5 rounded-2xl flex items-start gap-4">
+          <div className="p-2 bg-amber-500/20 rounded-lg">
+            <Database className="w-6 h-6 text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-amber-300 text-lg mb-1">
+              YMYL Fact-Check Gate — {factCheckBlocked.length} post{factCheckBlocked.length === 1 ? '' : 's'} blocked
+            </h3>
+            <p className="text-amber-200/80 text-sm mb-2">
+              These articles contain unverified factual claims in YMYL (health/finance/legal/safety) territory. Resolve flagged claims before publishing.
+            </p>
+            <ul className="text-amber-200/90 text-xs space-y-1 max-h-32 overflow-auto">
+              {factCheckBlocked.slice(0, 5).map((b) => (
+                <li key={b.id} className="truncate">
+                  • <span className="font-semibold">{b.title}</span> — {b.flagged} flagged claim{b.flagged === 1 ? '' : 's'}
+                </li>
+              ))}
+              {factCheckBlocked.length > 5 && (
+                <li className="text-amber-200/60">…and {factCheckBlocked.length - 5} more</li>
+              )}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {/* Action Bar */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
         <div className="flex flex-col sm:flex-row gap-2.5 md:gap-3 w-full md:w-auto">
