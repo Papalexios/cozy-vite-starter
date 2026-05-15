@@ -3,7 +3,8 @@ import { useOptimizerStore, type ContentItem, type GeneratedContentStore, type N
 import {
   FileText, Check, X, AlertCircle, Trash2,
   Sparkles, ArrowUpDown, Eye, Brain, ArrowRight,
-  CheckCircle, Clock, XCircle, Loader2, Database, Upload
+  CheckCircle, Clock, XCircle, Loader2, Database, Upload,
+  Image as ImageIcon, Tag, Calendar as CalendarIcon, Undo2, ChevronDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createOrchestrator, globalPerformanceTracker, type GeneratedContent, type NeuronWriterAnalysis } from "@/lib/sota";
@@ -12,6 +13,7 @@ import { EnhancedGenerationModal, type GenerationStep } from "../EnhancedGenerat
 import { ContentIntelligenceDashboard } from "../ContentIntelligenceDashboard";
 import { useSupabaseSyncContext } from "@/providers/SupabaseSyncProvider";
 import { useWordPressPublish } from "@/hooks/useWordPressPublish";
+import { rollbackToRevision } from "@/lib/wordpress/rollback";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
