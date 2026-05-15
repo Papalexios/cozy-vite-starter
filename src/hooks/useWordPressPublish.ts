@@ -274,6 +274,19 @@ export function useWordPressPublish() {
         postUrl: (post?.url || post?.link) as string | undefined,
       };
 
+      // Phase 1: best-effort persistence to content memory
+      if (options?.draftId && options?.siteId) {
+        recordPublish({
+          draft_id: options.draftId,
+          site_id: options.siteId,
+          status: 'success',
+          wp_post_id: result.postId ?? null,
+          wp_url: result.postUrl ?? null,
+          response: data,
+          html: content,
+        }).catch((e) => console.warn('[ContentMemory] recordPublish failed:', e));
+      }
+
       setPublishResult(result);
       return result;
 
@@ -283,6 +296,14 @@ export function useWordPressPublish() {
         success: false,
         error: errorMsg,
       };
+      if (options?.draftId && options?.siteId) {
+        recordPublish({
+          draft_id: options.draftId,
+          site_id: options.siteId,
+          status: 'error',
+          error: errorMsg,
+        }).catch((e) => console.warn('[ContentMemory] recordPublish (error) failed:', e));
+      }
       setPublishResult(result);
       return result;
     } finally {
