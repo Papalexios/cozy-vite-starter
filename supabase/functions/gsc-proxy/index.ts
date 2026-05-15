@@ -101,6 +101,38 @@ Deno.serve(async (req) => {
       return json({ sitemaps: data?.sitemap || [] });
     }
 
+    if (body.action === 'searchAnalytics') {
+      if (!body.siteUrl || !body.startDate || !body.endDate) {
+        return json({ error: 'siteUrl, startDate, endDate required' }, 400);
+      }
+      const site = encodeURIComponent(body.siteUrl);
+      const payload = {
+        startDate: body.startDate,
+        endDate: body.endDate,
+        dimensions: body.dimensions ?? ['query', 'page'],
+        rowLimit: Math.min(Math.max(body.rowLimit ?? 5000, 1), 25000),
+        startRow: body.startRow ?? 0,
+        searchType: body.searchType ?? 'web',
+        dataState: body.dataState ?? 'final',
+        ...(body.dimensionFilterGroups ? { dimensionFilterGroups: body.dimensionFilterGroups } : {}),
+      };
+      const r = await fetch(
+        `${GATEWAY_URL}/webmasters/v3/sites/${site}/searchAnalytics/query`,
+        { method: 'POST', headers, body: JSON.stringify(payload) },
+      );
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        return json({
+          error: (data as { message?: string })?.message || `HTTP ${r.status}`,
+          rateLimited: r.status === 429,
+        }, r.status);
+      }
+      return json({
+        rows: (data as { rows?: unknown[] })?.rows || [],
+        responseAggregationType: (data as { responseAggregationType?: string })?.responseAggregationType,
+      });
+    }
+
     return json({ error: 'Unknown action' }, 400);
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : String(err) }, 500);
