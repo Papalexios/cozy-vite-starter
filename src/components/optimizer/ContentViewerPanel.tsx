@@ -16,8 +16,11 @@ import {
   ChevronDown, ChevronUp, Filter, Tag, Layers, Layout
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { ContentItem } from '@/lib/store';
+import type { ContentItem, GeneratedContentStore } from '@/lib/store';
 import type { GeneratedContent } from '@/lib/sota';
+
+type FactCheckV2 = NonNullable<GeneratedContentStore[string]['factCheckV2']>;
+type FactCheckClaim = FactCheckV2['claims'][number];
 import type { NeuronWriterAnalysis, NeuronWriterTermData, NeuronWriterHeadingData } from '@/lib/sota/NeuronWriterService';
 import { scoreContentAgainstNeuron } from '@/lib/sota/NeuronWriterService';
 import { useWordPressPublish } from '@/hooks/useWordPressPublish';
@@ -77,6 +80,7 @@ interface ContentViewerPanelProps {
   item: ContentItem | null;
   generatedContent?: GeneratedContent | null;
   neuronData?: NeuronWriterAnalysis | null;
+  factCheckV2?: FactCheckV2 | null;
   onClose: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
@@ -87,6 +91,38 @@ interface ContentViewerPanelProps {
 
 type ViewTab = 'preview' | 'editor' | 'html' | 'seo' | 'links' | 'schema' | 'neuron';
 
+// ─── Fact-check inline highlighter ──────────────────────────────────
+function annotateClaimsInHtml(html: string, claims: FactCheckClaim[]): string {
+  if (!html || !claims?.length) return html;
+  let out = html;
+  // Process longer claims first so shorter substrings don't pre-empt them.
+  const sorted = [...claims].sort((a, b) => b.claim.text.length - a.claim.text.length);
+  for (const c of sorted) {
+    if (c.status === 'skipped') continue;
+    const raw = (c.claim.text || '').trim();
+    if (raw.length < 20) continue;
+    if (/[<>]/.test(raw)) continue;
+    // Use the first ~140 chars as the search needle; collapse whitespace.
+    const needle = raw.slice(0, 140).replace(/\s+/g, ' ');
+    const escaped = needle
+      .replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
+      .replace(/\s+/g, '\\s+');
+    let re: RegExp;
+    try { re = new RegExp(`(${escaped})`, 'i'); } catch { continue; }
+    if (!re.test(out)) continue;
+    const evidenceCount = c.evidence?.length || 0;
+    const tipParts = [c.status.toUpperCase()];
+    if (c.reason) tipParts.push(c.reason);
+    if (evidenceCount) tipParts.push(`${evidenceCount} source${evidenceCount > 1 ? 's' : ''}`);
+    const title = tipParts.join(' — ').replace(/"/g, '&quot;');
+    out = out.replace(
+      re,
+      `<mark class="fc-claim fc-${c.status}" data-claim-id="${c.claim.id}" data-status="${c.status}" title="${title}">$1</mark>`,
+    );
+  }
+  return out;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════
@@ -95,6 +131,7 @@ export function ContentViewerPanel({
   item,
   generatedContent,
   neuronData,
+  factCheckV2,
   onClose,
   onPrevious,
   onNext,
@@ -108,6 +145,7 @@ export function ContentViewerPanel({
   const [showRawHtml, setShowRawHtml] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishStatus, setPublishStatus] = useState<'draft' | 'publish'>('draft');
+  const [showFactCheck, setShowFactCheck] = useState(true);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -156,6 +194,19 @@ export function ContentViewerPanel({
 
   // ─── Effective display content (edited or original) ────────────────
   const displayContent = isEditorDirty ? editedContent : content;
+
+  // Fact-check overlay: counts + annotated HTML for the preview pane.
+  const factCheckCounts = useMemo(() => {
+    if (!factCheckV2) return null;
+    const s = factCheckV2.summary;
+    return { ...s, hasFlags: s.flagged > 0 };
+  }, [factCheckV2]);
+
+  const annotatedPreview = useMemo(() => {
+    const sanitized = sanitizeHtml(displayContent);
+    if (!showFactCheck || !factCheckV2?.claims?.length) return sanitized;
+    return annotateClaimsInHtml(sanitized, factCheckV2.claims);
+  }, [displayContent, showFactCheck, factCheckV2]);
 
   // Derive effective NeuronWriter data — fallback to generatedContent.neuronWriterAnalysis if prop is null
   const effectiveNeuronData = useMemo(() => {
@@ -545,7 +596,7 @@ export function ContentViewerPanel({
             {/* ────── PREVIEW TAB ────── */}
             {activeTab === 'preview' && (
               <div className="p-8">
-                <div className="flex items-center justify-center mb-8">
+                <div className="flex flex-col items-center gap-3 mb-8">
                   <div className="inline-flex items-center gap-3 px-4 py-2 bg-white/5 rounded-full border border-white/5 backdrop-blur-sm">
                     <Globe className="w-4 h-4 text-zinc-400" />
                     <span className="text-sm font-medium text-zinc-300">WordPress Preview Mode</span>
@@ -554,8 +605,36 @@ export function ContentViewerPanel({
                         <Edit3 className="w-3 h-3" /> Modified
                       </span>
                     )}
+                    {factCheckCounts && (
+                      <button
+                        type="button"
+                        onClick={() => setShowFactCheck(v => !v)}
+                        title={showFactCheck ? 'Hide fact-check highlights' : 'Show fact-check highlights'}
+                        className={cn(
+                          "flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg border transition-colors ml-2",
+                          showFactCheck
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20"
+                            : "bg-white/5 text-zinc-400 border-white/10 hover:bg-white/10"
+                        )}
+                      >
+                        <Shield className="w-3 h-3" />
+                        Fact-check {showFactCheck ? 'On' : 'Off'}
+                        {factCheckCounts.hasFlags && (
+                          <span className="px-1.5 py-px rounded-full bg-red-500/20 text-red-300 ml-1">{factCheckCounts.flagged} flagged</span>
+                        )}
+                      </button>
+                    )}
                   </div>
+                  {factCheckCounts && showFactCheck && (
+                    <div className="inline-flex items-center gap-3 px-3 py-1.5 rounded-full bg-black/20 border border-white/5 text-[11px] text-zinc-400">
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/60 border-b-2 border-emerald-500" /> Verified ({factCheckCounts.verified})</span>
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-red-500/60 border-b-2 border-red-500" /> Unverified ({factCheckCounts.unverified + factCheckCounts.insufficient})</span>
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500/60 border-b-2 border-amber-500" /> Stale ({factCheckCounts.stale})</span>
+                      <span className="text-zinc-500">Hover a highlight for sources</span>
+                    </div>
+                  )}
                 </div>
+
 
                 <div className="bg-white rounded-2xl shadow-2xl overflow-hidden max-w-5xl mx-auto ring-8 ring-black/20">
                   <div className="bg-gray-100 px-4 py-3 text-sm text-gray-500 border-b flex items-center gap-4">
@@ -854,12 +933,39 @@ export function ContentViewerPanel({
                       color: #1e293b;
                       line-height: 1.9;
                     }
+
+                    /* ═══ FACT-CHECK INLINE HIGHLIGHTS ═══ */
+                    .wp-preview-content mark.fc-claim {
+                      background: transparent;
+                      padding: 1px 2px;
+                      border-radius: 3px;
+                      cursor: help;
+                      transition: background 0.15s ease;
+                    }
+                    .wp-preview-content mark.fc-verified {
+                      background: rgba(16, 185, 129, 0.14);
+                      box-shadow: inset 0 -2px 0 0 #10b981;
+                    }
+                    .wp-preview-content mark.fc-verified:hover { background: rgba(16, 185, 129, 0.24); }
+                    .wp-preview-content mark.fc-unverified,
+                    .wp-preview-content mark.fc-insufficient {
+                      background: rgba(239, 68, 68, 0.14);
+                      box-shadow: inset 0 -2px 0 0 #ef4444;
+                    }
+                    .wp-preview-content mark.fc-unverified:hover,
+                    .wp-preview-content mark.fc-insufficient:hover { background: rgba(239, 68, 68, 0.24); }
+                    .wp-preview-content mark.fc-stale {
+                      background: rgba(245, 158, 11, 0.14);
+                      box-shadow: inset 0 -2px 0 0 #f59e0b;
+                    }
+                    .wp-preview-content mark.fc-stale:hover { background: rgba(245, 158, 11, 0.24); }
                   `}} />
                   <article
                     className="wp-preview-content"
                     style={{ padding: '48px 56px', fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', color: '#1a1a1a', lineHeight: 1.8, fontSize: '17px', backgroundColor: '#ffffff' }}
-                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(displayContent) }}
+                    dangerouslySetInnerHTML={{ __html: annotatedPreview }}
                   />
+
                 </div>
               </div>
             )}

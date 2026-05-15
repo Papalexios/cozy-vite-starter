@@ -1342,6 +1342,7 @@ export function ReviewExport() {
           item={viewingItem}
           generatedContent={reconstructGeneratedContent(generatedContentsStore[viewingItem.id])}
           neuronData={reconstructNeuronData(neuronWriterDataStore[viewingItem.id])}
+          factCheckV2={generatedContentsStore[viewingItem.id]?.factCheckV2 ?? null}
           onClose={() => setViewingItem(null)}
           onPrevious={handlePreviousItem}
           onNext={handleNextItem}
