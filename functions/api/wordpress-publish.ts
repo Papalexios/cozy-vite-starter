@@ -2,13 +2,13 @@
 
 import { isPublicUrl } from "../../src/lib/shared/isPublicUrl";
 import { getCorsHeadersForCF } from "../../src/lib/shared/corsHeaders";
+import { publishToWordPress, type WordPressPublishPayload } from "../../src/lib/wordpress/publish";
 
 interface Env {
   CORS_ALLOWED_ORIGINS?: string;
 }
 
 // ── Rate Limiter ────────────────────────────────────────────────────────────
-
 const rateLimiter = {
   tokens: 10,
   maxTokens: 10,
@@ -37,13 +37,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const origin = request.headers.get("origin");
   const cors = getCorsHeadersForCF(origin, env.CORS_ALLOWED_ORIGINS);
 
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: cors });
-  }
-
-  if (request.method !== "POST") {
-    return jsonError("Method not allowed", 405, cors);
-  }
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+  if (request.method !== "POST")    return jsonError("Method not allowed", 405, cors);
 
   if (!rateLimiter.tryAcquire()) {
     return new Response(
@@ -55,121 +50,53 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   try {
     const body: Record<string, unknown> = await request.json();
 
-    const wordpressUrl = String(body.wordpressUrl || body.wpUrl || "").replace(/\/+$/, "");
+    const wpUrl = String(body.wordpressUrl || body.wpUrl || "").replace(/\/+$/, "");
     const username = String(body.username || body.wpUsername || "");
     const appPassword = String(body.appPassword || body.wpPassword || body.wpAppPassword || "");
 
-    if (!wordpressUrl || !username || !appPassword) {
+    if (!wpUrl || !username || !appPassword) {
       return jsonError("Missing WordPress URL, username, or app password.", 400, cors);
     }
 
-    const wpUrlWithProto = wordpressUrl.startsWith("http") ? wordpressUrl : `https://${wordpressUrl}`;
+    const wpUrlWithProto = wpUrl.startsWith("http") ? wpUrl : `https://${wpUrl}`;
     if (!isPublicUrl(wpUrlWithProto)) {
       return jsonError("WordPress URL must be a public HTTP/HTTPS address", 400, cors);
     }
 
-    const title = String(body.title || "");
+    const title   = String(body.title   || "");
     const content = String(body.content || "");
-    const excerpt = String(body.excerpt ?? "");
-    const slug = body.slug ? String(body.slug) : undefined;
-    const status = String(body.status ?? "publish");
-    const categories = Array.isArray(body.categories) ? body.categories : undefined;
-    const tags = Array.isArray(body.tags) ? body.tags : undefined;
-    const seoTitle = String(body.seoTitle || "");
-    const metaDescription = String(body.metaDescription || "");
-    const sourceUrl = String(body.sourceUrl || "");
-    const existingPostId = body.existingPostId;
+    if (!title || !content) return jsonError("Missing required fields: title, content", 400, cors);
 
-    const apiUrl = `${wpUrlWithProto}/wp-json/wp/v2/posts`;
-    const auth = btoa(`${username}:${appPassword}`);
-    const authHeaders: Record<string, string> = {
-      "Authorization": `Basic ${auth}`,
-      "Content-Type": "application/json",
-      "Accept": "application/json",
+    const payload: WordPressPublishPayload = {
+      wpUrl: wpUrlWithProto,
+      username,
+      appPassword,
+      title,
+      content,
+      excerpt: body.excerpt ? String(body.excerpt) : undefined,
+      status: body.status as WordPressPublishPayload["status"],
+      slug: body.slug ? String(body.slug) : undefined,
+      categories: Array.isArray(body.categories) ? (body.categories as number[]) : undefined,
+      tags:       Array.isArray(body.tags)       ? (body.tags       as number[]) : undefined,
+      categoryNames: Array.isArray(body.categoryNames) ? (body.categoryNames as string[]) : undefined,
+      tagNames:      Array.isArray(body.tagNames)      ? (body.tagNames      as string[]) : undefined,
+      seoTitle:        body.seoTitle        ? String(body.seoTitle)        : undefined,
+      metaDescription: body.metaDescription ? String(body.metaDescription) : undefined,
+      sourceUrl:       body.sourceUrl       ? String(body.sourceUrl)       : undefined,
+      existingPostId: body.existingPostId as number | string | undefined,
+      authorId:       typeof body.authorId === "number" ? body.authorId : undefined,
+      canonicalUrl:   body.canonicalUrl ? String(body.canonicalUrl) : undefined,
+      schemaJson:     body.schemaJson,
+      featuredImage:  body.featuredImage as WordPressPublishPayload["featuredImage"],
+      scheduledDate:  body.scheduledDate ? String(body.scheduledDate) : undefined,
     };
 
-    let targetPostId: number | null = existingPostId ? Number(existingPostId) : null;
-    if (targetPostId !== null && isNaN(targetPostId)) targetPostId = null;
-
-    if (!targetPostId && slug) {
-      try {
-        const searchRes = await fetch(`${apiUrl}?slug=${encodeURIComponent(slug)}&status=any`, { headers: authHeaders });
-        if (searchRes.ok) {
-          const posts: Array<{ id: number }> = await searchRes.json();
-          if (posts.length > 0) targetPostId = posts[0].id;
-        }
-      } catch { /* ignore */ }
-    }
-
-    if (!targetPostId && sourceUrl) {
-      try {
-        const pathMatch = sourceUrl.match(/\/([^/]+)\/?$/);
-        if (pathMatch) {
-          const sourceSlug = pathMatch[1].replace(/\/$/, "");
-          const searchRes = await fetch(`${apiUrl}?slug=${encodeURIComponent(sourceSlug)}&status=any`, { headers: authHeaders });
-          if (searchRes.ok) {
-            const posts: Array<{ id: number }> = await searchRes.json();
-            if (posts.length > 0) targetPostId = posts[0].id;
-          }
-        }
-      } catch { /* ignore */ }
-    }
-
-    const postData: Record<string, unknown> = { title, content, status };
-    if (excerpt) postData.excerpt = excerpt;
-    if (slug) {
-      postData.slug = slug.replace(/^\/+|\/+$/g, "").split("/").pop() || slug;
-    }
-    if (categories) postData.categories = categories;
-    if (tags) postData.tags = tags;
-
-    if (metaDescription || seoTitle) {
-      postData.meta = {
-        _yoast_wpseo_metadesc: metaDescription || "",
-        _yoast_wpseo_title: seoTitle || title,
-        rank_math_description: metaDescription || "",
-        rank_math_title: seoTitle || title,
-        _aioseo_description: metaDescription || "",
-        _aioseo_title: seoTitle || title,
-      };
-    }
-
-    const targetUrl = targetPostId ? `${apiUrl}/${targetPostId}` : apiUrl;
-    const method = targetPostId ? "PUT" : "POST";
-
-    const wpRes = await fetch(targetUrl, {
-      method,
-      headers: authHeaders,
-      body: JSON.stringify(postData),
+    const result = await publishToWordPress(payload);
+    const status = result.success ? 200 : (result.status ?? 500);
+    return new Response(JSON.stringify(result), {
+      status,
+      headers: { ...cors, "Content-Type": "application/json" },
     });
-
-    const txt = await wpRes.text();
-    let json: Record<string, unknown> = {};
-    try { json = JSON.parse(txt); } catch { json = { raw: txt }; }
-
-    if (!wpRes.ok) {
-      let errorMessage = String(json?.message || `WordPress error (${wpRes.status})`);
-      if (wpRes.status === 401) errorMessage = "Authentication failed. Check username and application password.";
-      if (wpRes.status === 403) errorMessage = "Permission denied. Ensure the user has publish capabilities.";
-      if (wpRes.status === 404) errorMessage = "WordPress REST API not found. Ensure permalinks are enabled.";
-      return jsonError(errorMessage, wpRes.status, cors);
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        updated: !!targetPostId,
-        post: {
-          id: json.id,
-          url: json.link,
-          link: json.link,
-          status: json.status,
-          title: (json.title as Record<string, string>)?.rendered || title,
-          slug: json.slug,
-        },
-      }),
-      { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
-    );
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     const isTimeout = msg.includes("abort") || msg.includes("timeout");
