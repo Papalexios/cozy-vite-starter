@@ -16,8 +16,11 @@ import {
   ChevronDown, ChevronUp, Filter, Tag, Layers, Layout
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { ContentItem } from '@/lib/store';
+import type { ContentItem, GeneratedContentStore } from '@/lib/store';
 import type { GeneratedContent } from '@/lib/sota';
+
+type FactCheckV2 = NonNullable<GeneratedContentStore[string]['factCheckV2']>;
+type FactCheckClaim = FactCheckV2['claims'][number];
 import type { NeuronWriterAnalysis, NeuronWriterTermData, NeuronWriterHeadingData } from '@/lib/sota/NeuronWriterService';
 import { scoreContentAgainstNeuron } from '@/lib/sota/NeuronWriterService';
 import { useWordPressPublish } from '@/hooks/useWordPressPublish';
