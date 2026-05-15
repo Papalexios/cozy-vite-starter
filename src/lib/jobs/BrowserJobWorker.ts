@@ -60,7 +60,7 @@ class BrowserJobWorker {
 
   /** Start the polling loop. Safe to call multiple times. */
   start() {
-    if (this.running || !isSupabaseConfigured) return;
+    if (this.running || !isSupabaseConfigured()) return;
     this.running = true;
     this.tick();
   }

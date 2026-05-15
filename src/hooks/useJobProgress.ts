@@ -12,7 +12,7 @@ export function useJobProgress(jobId: string | null | undefined) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!jobId || !isSupabaseConfigured) return;
+    if (!jobId || !isSupabaseConfigured()) return;
     let cancelled = false;
 
     // initial fetch
@@ -21,6 +21,7 @@ export function useJobProgress(jobId: string | null | undefined) {
     });
 
     const sb = getSupabaseClient();
+    if (!sb) return;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     let channel: ReturnType<typeof sb.channel> | null = null;
 
