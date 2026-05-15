@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.wp-discover]
 verify_jwt = false
+
+[functions.content-job-runner]
+verify_jwt = false
