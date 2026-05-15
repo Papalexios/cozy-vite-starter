@@ -1526,9 +1526,105 @@ export function ReviewExport() {
                     </div>
                   </div>
 
-                  <div className="p-5 bg-black/20 border border-white/10 rounded-2xl">
-                    <h4 className="text-sm font-bold text-zinc-300 mb-4 flex items-center justify-between">
-                      <span>Publishing Queue</span>
+                  {/* ── Phase 5 — Advanced Publish Options ── */}
+                  <div className="bg-black/20 border border-white/10 rounded-2xl overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedPublish(v => !v)}
+                      className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-white/5 transition-colors"
+                    >
+                      <span className="flex items-center gap-2 text-sm font-bold text-zinc-300">
+                        <Sparkles className="w-4 h-4 text-emerald-400" />
+                        Advanced Publish Options
+                        <span className="text-xs font-normal text-zinc-500 ml-1">(applies to all in queue)</span>
+                      </span>
+                      <ChevronDown className={cn("w-4 h-4 text-zinc-400 transition-transform", showAdvancedPublish && "rotate-180")} />
+                    </button>
+
+                    {showAdvancedPublish && (
+                      <div className="px-5 pb-5 space-y-4 border-t border-white/5">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-4">
+                          <div className="md:col-span-2">
+                            <label className="text-xs font-bold text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                              <ImageIcon className="w-3.5 h-3.5" /> Featured image URL
+                            </label>
+                            <input
+                              type="url"
+                              value={pubFeaturedImageUrl}
+                              onChange={(e) => setPubFeaturedImageUrl(e.target.value)}
+                              placeholder="https://example.com/image.jpg"
+                              className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/40"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-400 mb-1.5">Alt text</label>
+                            <input
+                              type="text"
+                              value={pubFeaturedImageAlt}
+                              onChange={(e) => setPubFeaturedImageAlt(e.target.value)}
+                              placeholder="Describe the image"
+                              className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/40"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs font-bold text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                              <Tag className="w-3.5 h-3.5" /> Categories (comma-separated)
+                            </label>
+                            <input
+                              type="text"
+                              value={pubCategoryNames}
+                              onChange={(e) => setPubCategoryNames(e.target.value)}
+                              placeholder="SEO, Content Marketing"
+                              className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/40"
+                            />
+                            <p className="text-[10px] text-zinc-600 mt-1">Created in WordPress if they don't exist.</p>
+                          </div>
+                          <div>
+                            <label className="text-xs font-bold text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                              <Tag className="w-3.5 h-3.5" /> Tags (comma-separated)
+                            </label>
+                            <input
+                              type="text"
+                              value={pubTagNames}
+                              onChange={(e) => setPubTagNames(e.target.value)}
+                              placeholder="long-form, e-e-a-t"
+                              className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/40"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs font-bold text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                              <CalendarIcon className="w-3.5 h-3.5" /> Schedule (local time)
+                            </label>
+                            <input
+                              type="datetime-local"
+                              value={pubScheduledDate}
+                              onChange={(e) => setPubScheduledDate(e.target.value)}
+                              className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/40"
+                            />
+                            <p className="text-[10px] text-zinc-600 mt-1">If set, status forced to <code>future</code>.</p>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-400 mb-1.5">Canonical URL (optional)</label>
+                            <input
+                              type="url"
+                              value={pubCanonicalUrl}
+                              onChange={(e) => setPubCanonicalUrl(e.target.value)}
+                              placeholder="https://yoursite.com/post-slug/"
+                              className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/40"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+
                       <span className="text-xs font-normal text-zinc-500">{(publishableSelected.length > 0 ? publishableSelected : allPublishable).length} items</span>
                     </h4>
                     <ul className="text-sm text-zinc-400 space-y-3 max-h-48 overflow-y-auto custom-scrollbar pr-2">
