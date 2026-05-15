@@ -236,6 +236,63 @@ export function ReviewExport() {
     postUrl?: string;
   }>>([]);
 
+  // ── Phase 5 — bulk publish overrides (apply to every item in the queue) ──
+  const [showAdvancedPublish, setShowAdvancedPublish] = useState(false);
+  const [pubFeaturedImageUrl, setPubFeaturedImageUrl] = useState('');
+  const [pubFeaturedImageAlt, setPubFeaturedImageAlt] = useState('');
+  const [pubCategoryNames, setPubCategoryNames] = useState('');
+  const [pubTagNames, setPubTagNames] = useState('');
+  const [pubScheduledDate, setPubScheduledDate] = useState(''); // datetime-local value
+  const [pubCanonicalUrl, setPubCanonicalUrl] = useState('');
+
+  // ── Phase 5 — per-row rollback state ──
+  const [rollbackBusyId, setRollbackBusyId] = useState<string | null>(null);
+
+  const handleRollback = useCallback(async (itemId: string) => {
+    const stored = generatedContentsStore[itemId];
+    if (!stored) return;
+    if (!stored.draftId) {
+      toast.error('Rollback unavailable: no Supabase draft history for this item.');
+      return;
+    }
+    if (!stored.publishedPostId) {
+      toast.error('Rollback unavailable: this item has not been published yet.');
+      return;
+    }
+    if (!config.wpUrl || !config.wpUsername || !config.wpAppPassword) {
+      toast.error('WordPress credentials missing. Configure them in Setup first.');
+      return;
+    }
+    if (!confirm('Rollback this post to the previous saved revision? This will overwrite the live WordPress post.')) return;
+
+    setRollbackBusyId(itemId);
+    try {
+      const res = await rollbackToRevision({
+        draftId: stored.draftId,
+        wp: {
+          wpUrl: config.wpUrl,
+          username: config.wpUsername,
+          appPassword: config.wpAppPassword,
+          title: stored.seoTitle || stored.title,
+          existingPostId: stored.publishedPostId,
+          slug: stored.slug,
+        },
+        status: 'publish',
+        metaDescription: stored.metaDescription,
+        seoTitle: stored.seoTitle,
+      });
+      if (res.success) {
+        toast.success(`Rolled back to v${res.restoredVersion}.`);
+      } else {
+        toast.error(`Rollback failed: ${res.error || 'unknown error'}`);
+      }
+    } catch (e) {
+      toast.error(`Rollback error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setRollbackBusyId(null);
+    }
+  }, [generatedContentsStore, config]);
+
   // Count selected completed items that can be published
   const publishableSelected = useMemo(() => {
     return contentItems.filter(
