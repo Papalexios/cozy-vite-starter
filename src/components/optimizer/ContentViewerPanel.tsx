@@ -933,12 +933,39 @@ export function ContentViewerPanel({
                       color: #1e293b;
                       line-height: 1.9;
                     }
+
+                    /* ═══ FACT-CHECK INLINE HIGHLIGHTS ═══ */
+                    .wp-preview-content mark.fc-claim {
+                      background: transparent;
+                      padding: 1px 2px;
+                      border-radius: 3px;
+                      cursor: help;
+                      transition: background 0.15s ease;
+                    }
+                    .wp-preview-content mark.fc-verified {
+                      background: rgba(16, 185, 129, 0.14);
+                      box-shadow: inset 0 -2px 0 0 #10b981;
+                    }
+                    .wp-preview-content mark.fc-verified:hover { background: rgba(16, 185, 129, 0.24); }
+                    .wp-preview-content mark.fc-unverified,
+                    .wp-preview-content mark.fc-insufficient {
+                      background: rgba(239, 68, 68, 0.14);
+                      box-shadow: inset 0 -2px 0 0 #ef4444;
+                    }
+                    .wp-preview-content mark.fc-unverified:hover,
+                    .wp-preview-content mark.fc-insufficient:hover { background: rgba(239, 68, 68, 0.24); }
+                    .wp-preview-content mark.fc-stale {
+                      background: rgba(245, 158, 11, 0.14);
+                      box-shadow: inset 0 -2px 0 0 #f59e0b;
+                    }
+                    .wp-preview-content mark.fc-stale:hover { background: rgba(245, 158, 11, 0.24); }
                   `}} />
                   <article
                     className="wp-preview-content"
                     style={{ padding: '48px 56px', fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', color: '#1a1a1a', lineHeight: 1.8, fontSize: '17px', backgroundColor: '#ffffff' }}
-                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(displayContent) }}
+                    dangerouslySetInnerHTML={{ __html: annotatedPreview }}
                   />
+
                 </div>
               </div>
             )}
