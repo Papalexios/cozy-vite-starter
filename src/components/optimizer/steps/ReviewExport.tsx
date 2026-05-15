@@ -670,6 +670,13 @@ export function ReviewExport() {
             score: result.checklist.score,
             items: result.checklist.items,
           } : undefined,
+          factCheckV2: (result as any).factCheckV2 ? {
+            ymyl: (result as any).factCheckV2.ymyl,
+            summary: (result as any).factCheckV2.summary,
+            publishAllowed: (result as any).factCheckV2.publishAllowed,
+            blockingReasons: (result as any).factCheckV2.blockingReasons,
+            claims: (result as any).factCheckV2.claims,
+          } : undefined,
         };
 
         // Store the generated content in persisted store (survives navigation)

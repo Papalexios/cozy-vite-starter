@@ -110,6 +110,28 @@ export interface GeneratedContentStore {
         fix?: string;
       }>;
     };
+    /** Phase 4 — structured fact-check report (atomic claims + evidence binding). */
+    factCheckV2?: {
+      ymyl: { isYmyl: boolean; confidence: number; matchedTerms: string[] };
+      summary: {
+        totalClaims: number;
+        factualClaims: number;
+        verified: number;
+        unverified: number;
+        insufficient: number;
+        stale: number;
+        skipped: number;
+        flagged: number;
+      };
+      publishAllowed: boolean;
+      blockingReasons: string[];
+      claims: Array<{
+        claim: { id: string; paragraphIndex: number; text: string; type: 'factual' | 'opinion' | 'definitional'; rationale?: string };
+        status: 'verified' | 'unverified' | 'insufficient' | 'stale' | 'skipped';
+        evidence: Array<{ url: string; domain: string; lastModified?: string | null; ageDays?: number | null }>;
+        reason?: string;
+      }>;
+    };
   };
 }
 
