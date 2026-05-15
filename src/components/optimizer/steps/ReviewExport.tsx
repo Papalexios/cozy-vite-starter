@@ -1382,6 +1382,19 @@ export function ReviewExport() {
                       >
                         <Eye className="w-4 h-4" />
                       </button>
+                      {/* Phase 5 — rollback button (only if previously published & has revision history) */}
+                      {stored?.publishedPostId && (
+                        <button
+                          onClick={() => handleRollback(item.id)}
+                          disabled={rollbackBusyId === item.id}
+                          className="p-1.5 text-amber-400/80 hover:text-amber-300 hover:bg-amber-500/10 rounded transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={stored.draftId ? "Rollback to previous revision" : "Rollback unavailable — no Supabase draft history"}
+                        >
+                          {rollbackBusyId === item.id
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : <Undo2 className="w-4 h-4" />}
+                        </button>
+                      )}
                       <button
                         onClick={() => removeContentItem(item.id)}
                         className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-all"
