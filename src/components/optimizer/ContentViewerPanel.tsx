@@ -131,6 +131,7 @@ export function ContentViewerPanel({
   item,
   generatedContent,
   neuronData,
+  factCheckV2,
   onClose,
   onPrevious,
   onNext,
@@ -144,6 +145,7 @@ export function ContentViewerPanel({
   const [showRawHtml, setShowRawHtml] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishStatus, setPublishStatus] = useState<'draft' | 'publish'>('draft');
+  const [showFactCheck, setShowFactCheck] = useState(true);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
