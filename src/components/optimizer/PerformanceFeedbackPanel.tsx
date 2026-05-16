@@ -5,7 +5,7 @@
 // topical authority, and ROI cards. Best-effort: silently degrades
 // when Supabase / GSC data isn't yet populated.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { withSupabase } from "@/lib/supabaseClient";
 import {
   detectDecay, type DecayItem,
