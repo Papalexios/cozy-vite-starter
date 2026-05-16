@@ -43,46 +43,49 @@ export function PerformanceFeedbackPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const loadMetrics = useCallback(async (signal?: { cancelled: boolean }) => {
+    if (!siteId) return;
+    setLoading(true); setError(null);
+    try {
+      const [d, c, a, recentPublishes] = await Promise.all([
+        detectDecay({ site_id: siteId }),
+        buildRefreshCalendar({ site_id: siteId, limit: 15 }),
+        scoreTopicalAuthority({ site_id: siteId, persist: false }),
+        withSupabase(async (sb) => {
+          const { data, error } = await sb.from("publish_logs")
+            .select("id,draft_id,wp_url,published_at")
+            .eq("site_id", siteId)
+            .eq("status", "success")
+            .order("published_at", { ascending: false })
+            .limit(8);
+          if (error) throw error;
+          return (data ?? []) as PublishLogLite[];
+        }, [] as PublishLogLite[]),
+      ]);
+      if (signal?.cancelled) return;
+      setDecay(d); setCalendar(c); setAuthority(a);
+
+      const roiList = await Promise.all(
+        recentPublishes.filter((p) => p.wp_url).map((p) =>
+          computeRoi({ draft_id: p.draft_id, site_id: siteId, page_url: p.wp_url!, publishedAt: p.published_at })
+            .catch(() => null)
+        )
+      );
+      if (!signal?.cancelled) setRois(roiList.filter((r): r is RoiReport => !!r));
+    } catch (e) {
+      if (!signal?.cancelled) setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (!signal?.cancelled) setLoading(false);
+    }
+  }, [siteId]);
+
   // Load all signals when site changes
   useEffect(() => {
     if (!siteId) return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true); setError(null);
-      try {
-        const [d, c, a, recentPublishes] = await Promise.all([
-          detectDecay({ site_id: siteId }),
-          buildRefreshCalendar({ site_id: siteId, limit: 15 }),
-          scoreTopicalAuthority({ site_id: siteId, persist: false }),
-          withSupabase(async (sb) => {
-            const { data, error } = await sb.from("publish_logs")
-              .select("id,draft_id,wp_url,published_at")
-              .eq("site_id", siteId)
-              .eq("status", "success")
-              .order("published_at", { ascending: false })
-              .limit(8);
-            if (error) throw error;
-            return (data ?? []) as PublishLogLite[];
-          }, [] as PublishLogLite[]),
-        ]);
-        if (cancelled) return;
-        setDecay(d); setCalendar(c); setAuthority(a);
-
-        const roiList = await Promise.all(
-          recentPublishes.filter((p) => p.wp_url).map((p) =>
-            computeRoi({ draft_id: p.draft_id, site_id: siteId, page_url: p.wp_url!, publishedAt: p.published_at })
-              .catch(() => null)
-          )
-        );
-        if (!cancelled) setRois(roiList.filter((r): r is RoiReport => !!r));
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [siteId]);
+    const signal = { cancelled: false };
+    loadMetrics(signal);
+    return () => { signal.cancelled = true; };
+  }, [siteId, loadMetrics]);
 
   const decayedCount = decay.length;
   const highSeverity = useMemo(() => decay.filter((d) => d.severity === "high").length, [decay]);
