@@ -5,7 +5,7 @@
 // topical authority, and ROI cards. Best-effort: silently degrades
 // when Supabase / GSC data isn't yet populated.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { withSupabase } from "@/lib/supabaseClient";
 import {
   detectDecay, type DecayItem,
@@ -14,6 +14,7 @@ import {
   computeRoi, type RoiReport,
 } from "@/lib/feedback";
 import { TrendingDown, TrendingUp, Activity, RefreshCw, Layers, Target, AlertTriangle } from "lucide-react";
+
 
 interface SiteOption { id: string; name: string; wp_url: string }
 interface PublishLogLite { id: string; draft_id: string; wp_url: string | null; published_at: string }
@@ -42,46 +43,49 @@ export function PerformanceFeedbackPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const loadMetrics = useCallback(async (signal?: { cancelled: boolean }) => {
+    if (!siteId) return;
+    setLoading(true); setError(null);
+    try {
+      const [d, c, a, recentPublishes] = await Promise.all([
+        detectDecay({ site_id: siteId }),
+        buildRefreshCalendar({ site_id: siteId, limit: 15 }),
+        scoreTopicalAuthority({ site_id: siteId, persist: false }),
+        withSupabase(async (sb) => {
+          const { data, error } = await sb.from("publish_logs")
+            .select("id,draft_id,wp_url,published_at")
+            .eq("site_id", siteId)
+            .eq("status", "success")
+            .order("published_at", { ascending: false })
+            .limit(8);
+          if (error) throw error;
+          return (data ?? []) as PublishLogLite[];
+        }, [] as PublishLogLite[]),
+      ]);
+      if (signal?.cancelled) return;
+      setDecay(d); setCalendar(c); setAuthority(a);
+
+      const roiList = await Promise.all(
+        recentPublishes.filter((p) => p.wp_url).map((p) =>
+          computeRoi({ draft_id: p.draft_id, site_id: siteId, page_url: p.wp_url!, publishedAt: p.published_at })
+            .catch(() => null)
+        )
+      );
+      if (!signal?.cancelled) setRois(roiList.filter((r): r is RoiReport => !!r));
+    } catch (e) {
+      if (!signal?.cancelled) setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (!signal?.cancelled) setLoading(false);
+    }
+  }, [siteId]);
+
   // Load all signals when site changes
   useEffect(() => {
     if (!siteId) return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true); setError(null);
-      try {
-        const [d, c, a, recentPublishes] = await Promise.all([
-          detectDecay({ site_id: siteId }),
-          buildRefreshCalendar({ site_id: siteId, limit: 15 }),
-          scoreTopicalAuthority({ site_id: siteId, persist: false }),
-          withSupabase(async (sb) => {
-            const { data, error } = await sb.from("publish_logs")
-              .select("id,draft_id,wp_url,published_at")
-              .eq("site_id", siteId)
-              .eq("status", "success")
-              .order("published_at", { ascending: false })
-              .limit(8);
-            if (error) throw error;
-            return (data ?? []) as PublishLogLite[];
-          }, [] as PublishLogLite[]),
-        ]);
-        if (cancelled) return;
-        setDecay(d); setCalendar(c); setAuthority(a);
-
-        const roiList = await Promise.all(
-          recentPublishes.filter((p) => p.wp_url).map((p) =>
-            computeRoi({ draft_id: p.draft_id, site_id: siteId, page_url: p.wp_url!, publishedAt: p.published_at })
-              .catch(() => null)
-          )
-        );
-        if (!cancelled) setRois(roiList.filter((r): r is RoiReport => !!r));
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [siteId]);
+    const signal = { cancelled: false };
+    loadMetrics(signal);
+    return () => { signal.cancelled = true; };
+  }, [siteId, loadMetrics]);
 
   const decayedCount = decay.length;
   const highSeverity = useMemo(() => decay.filter((d) => d.severity === "high").length, [decay]);
@@ -107,13 +111,25 @@ export function PerformanceFeedbackPanel() {
           </h2>
           <p className="text-xs text-muted-foreground">Decay detection, refresh calendar, topical authority and ROI per draft.</p>
         </div>
-        <select
-          value={siteId}
-          onChange={(e) => setSiteId(e.target.value)}
-          className="bg-background border border-border rounded-lg px-3 py-1.5 text-sm"
-        >
-          {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            value={siteId}
+            onChange={(e) => setSiteId(e.target.value)}
+            className="bg-background border border-border rounded-lg px-3 py-1.5 text-sm"
+          >
+            {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <button
+            type="button"
+            onClick={() => loadMetrics()}
+            disabled={loading || !siteId}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground hover:bg-muted/50 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Rerun decay, refresh calendar, topical authority and ROI"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh metrics
+          </button>
+        </div>
       </header>
 
       {error && (
