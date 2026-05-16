@@ -111,13 +111,25 @@ export function PerformanceFeedbackPanel() {
           </h2>
           <p className="text-xs text-muted-foreground">Decay detection, refresh calendar, topical authority and ROI per draft.</p>
         </div>
-        <select
-          value={siteId}
-          onChange={(e) => setSiteId(e.target.value)}
-          className="bg-background border border-border rounded-lg px-3 py-1.5 text-sm"
-        >
-          {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            value={siteId}
+            onChange={(e) => setSiteId(e.target.value)}
+            className="bg-background border border-border rounded-lg px-3 py-1.5 text-sm"
+          >
+            {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <button
+            type="button"
+            onClick={() => loadMetrics()}
+            disabled={loading || !siteId}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground hover:bg-muted/50 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Rerun decay, refresh calendar, topical authority and ROI"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh metrics
+          </button>
+        </div>
       </header>
 
       {error && (
