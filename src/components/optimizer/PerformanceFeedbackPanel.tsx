@@ -14,6 +14,7 @@ import {
   computeRoi, type RoiReport,
 } from "@/lib/feedback";
 import { TrendingDown, TrendingUp, Activity, RefreshCw, Layers, Target, AlertTriangle } from "lucide-react";
+import { useCallback, useRef } from "react";
 
 interface SiteOption { id: string; name: string; wp_url: string }
 interface PublishLogLite { id: string; draft_id: string; wp_url: string | null; published_at: string }
