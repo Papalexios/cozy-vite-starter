@@ -785,6 +785,7 @@ export function ReviewExport() {
             blockingReasons: (result as any).factCheckV2.blockingReasons,
             claims: (result as any).factCheckV2.claims,
           } : undefined,
+          informationGain: (result as any).informationGain || undefined,
         };
 
         // Store the generated content in persisted store (survives navigation)
