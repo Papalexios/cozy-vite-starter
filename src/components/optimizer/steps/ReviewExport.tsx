@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useOptimizerStore, type ContentItem, type GeneratedContentStore, type NeuronWriterDataStore } from "@/lib/store";
 import {
   FileText, Check, X, AlertCircle, Trash2,
@@ -24,6 +24,27 @@ import PublishVerificationChecklist from "../PublishVerificationChecklist";
 import { GenerationProgressModal } from "../GenerationProgressModal";
 import { createAgentRunner, type AgentEvent } from "@/lib/sota/agents";
 import { lintSnippetBait } from "@/lib/sota/aeo/snippetBaitLinter";
+
+const MIN_ENTERPRISE_ARTICLE_WORDS = 1800;
+const MIN_ENTERPRISE_ARTICLE_CHARS = 9000;
+
+function countPlainWords(html: string): number {
+  return (html || '').replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
+}
+
+function assertEnterpriseArticleComplete(result: any): void {
+  const html = String(result?.content || '').trim();
+  const wordCount = Number(result?.metrics?.wordCount || countPlainWords(html));
+  const hasArticle = /<article\b/i.test(html) && /<\/article>/i.test(html);
+  const h2Count = (html.match(/<h2\b/gi) || []).length;
+  const paragraphCount = (html.match(/<p\b/gi) || []).length;
+
+  if (!html || html.length < MIN_ENTERPRISE_ARTICLE_CHARS || wordCount < MIN_ENTERPRISE_ARTICLE_WORDS || !hasArticle || h2Count < 5 || paragraphCount < 10) {
+    throw new Error(
+      `INCOMPLETE_ARTICLE: Generated output failed enterprise completeness checks (${wordCount} words, ${html.length} chars, ${h2Count} H2s, ${paragraphCount} paragraphs). The draft was not saved. Retry with a stronger model or configured fallback.`
+    );
+  }
+}
 
 // Helper to reconstruct GeneratedContent from persisted store (minimal shape for viewer)
 function reconstructGeneratedContent(stored: GeneratedContentStore[string] | undefined): GeneratedContent | null {
