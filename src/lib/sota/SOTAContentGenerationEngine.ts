@@ -79,6 +79,16 @@ function isUnsafeOpenRouterLongFormModel(modelId: string): boolean {
   return LONGFORM_UNSAFE_OPENROUTER_PATTERNS.some(pattern => pattern.test(modelId));
 }
 
+function parseFallbackEntry(entry: string): { provider: AIModel; modelId?: string } | null {
+  const colonIdx = entry.indexOf(':');
+  const provider = (colonIdx > 0 ? entry.substring(0, colonIdx) : entry) as AIModel;
+  if (!DEFAULT_MODEL_CONFIGS[provider]) return null;
+  return {
+    provider,
+    modelId: colonIdx > 0 ? entry.substring(colonIdx + 1) : undefined,
+  };
+}
+
 // Free / community OpenRouter backends often cap a single response well below
 // what a 3000-word article needs. When that happens the API returns
 // finish_reason="length" with a partial body. Instead of failing the whole
@@ -277,6 +287,28 @@ export class SOTAContentGenerationEngine {
         msg.includes('timed out') || msg.includes('AbortError');
     }
     return false;
+  }
+
+  private retryDelayMs(error: unknown, attempt: number): number {
+    const msg = error instanceof Error ? error.message.toLowerCase() : '';
+    if (msg.includes('429') || msg.includes('rate limit') || msg.includes('rate_limit')) {
+      return Math.min(30_000 * Math.max(1, attempt), 90_000);
+    }
+    return Math.min(1500 * Math.pow(2, attempt), 12_000);
+  }
+
+  private automaticFallbacks(primaryModel: AIModel, primaryModelId?: string): string[] {
+    const fallbacks: string[] = [];
+    const add = (entry: string) => { if (!fallbacks.includes(entry)) fallbacks.push(entry); };
+
+    if (this.apiKeys.openrouterApiKey && (primaryModel !== 'openrouter' || primaryModelId !== OPENROUTER_LONGFORM_SAFE_MODEL)) {
+      add(`openrouter:${OPENROUTER_LONGFORM_SAFE_MODEL}`);
+    }
+    if (this.apiKeys.openaiApiKey && primaryModel !== 'openai') add('openai');
+    if (this.apiKeys.anthropicApiKey && primaryModel !== 'anthropic') add('anthropic');
+    if (this.apiKeys.geminiApiKey && primaryModel !== 'gemini') add('gemini');
+    if (this.apiKeys.groqApiKey && primaryModel !== 'groq') add('groq');
+    return fallbacks;
   }
 
   private countWords(text: string): number {
