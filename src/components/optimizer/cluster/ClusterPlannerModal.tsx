@@ -2,12 +2,14 @@
 // Phase 10 — Root-topic input → plans pillar + spokes → renders ReactFlow canvas.
 
 import { useState } from 'react';
-import { Loader2, Network, Sparkles, X } from 'lucide-react';
+import { Loader2, Network, Sparkles, X, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { useOptimizerStore } from '@/lib/store';
 import { planCluster } from '@/lib/sota/clusters/ClusterPlanner';
 import { buildLinkMatrix, embedCluster } from '@/lib/sota/clusters/LinkMatrix';
 import type { ClusterLink, TopicCluster } from '@/lib/sota/clusters/ClusterTypes';
+import { ClusterRepository } from '@/lib/db/clusterRepository';
+import { isSupabaseConfigured } from '@/lib/supabaseClient';
 import { ClusterCanvas } from './ClusterCanvas';
 
 export function ClusterPlannerModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -25,6 +27,8 @@ export function ClusterPlannerModal({ open, onClose }: { open: boolean; onClose:
   const [audience, setAudience] = useState('');
   const [spokes, setSpokes] = useState(10);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
   const [cluster, setCluster] = useState<TopicCluster | null>(null);
   const [links, setLinks] = useState<ClusterLink[]>([]);
 
@@ -36,6 +40,7 @@ export function ClusterPlannerModal({ open, onClose }: { open: boolean; onClose:
       return;
     }
     setLoading(true);
+    setSavedId(null);
     try {
       const planned = await planCluster({
         rootTopic: rootTopic.trim(),
@@ -53,6 +58,29 @@ export function ClusterPlannerModal({ open, onClose }: { open: boolean; onClose:
       toast.error(`Plan failed: ${e?.message || e}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!cluster) return;
+    if (!isSupabaseConfigured()) {
+      toast.error('Connect Supabase in Setup to persist clusters.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const saved = await ClusterRepository.save(cluster);
+      if (!saved) {
+        toast.error('Save failed — check that migration 005 has been run in Supabase.');
+        return;
+      }
+      setSavedId(saved.id);
+      setCluster(saved);
+      toast.success('Cluster saved.');
+    } catch (e: any) {
+      toast.error(`Save failed: ${e?.message || e}`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -117,12 +145,22 @@ export function ClusterPlannerModal({ open, onClose }: { open: boolean; onClose:
 
           {cluster && (
             <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-foreground">{cluster.rootTopic}</h3>
-                  {cluster.summary && <p className="text-xs text-muted-foreground">{cluster.summary}</p>}
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-foreground truncate">{cluster.rootTopic}</h3>
+                  {cluster.summary && <p className="text-xs text-muted-foreground line-clamp-2">{cluster.summary}</p>}
                 </div>
-                <div className="text-xs text-muted-foreground">{links.length} links · {cluster.nodes.length} nodes</div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-xs text-muted-foreground">{links.length} links · {cluster.nodes.length} nodes</div>
+                  <button
+                    onClick={handleSave}
+                    disabled={saving || !!savedId}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50 transition"
+                  >
+                    {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    {savedId ? 'Saved' : saving ? 'Saving…' : 'Save cluster'}
+                  </button>
+                </div>
               </div>
               <ClusterCanvas cluster={cluster} links={links} />
               <details className="rounded-xl border border-border bg-background/40 p-3">
