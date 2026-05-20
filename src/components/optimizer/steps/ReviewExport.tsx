@@ -879,11 +879,10 @@ export function ReviewExport() {
         });
         }
 
-
-        // Mark all steps complete
-        setGenerationSteps(prev => prev.map(s => ({ ...s, status: 'completed' })));
-
         assertEnterpriseArticleComplete(result);
+
+        // Mark all steps complete only after the article passes hard completeness gates.
+        setGenerationSteps(prev => prev.map(s => ({ ...s, status: 'completed' })));
 
         // Build content object for storage and database
         const contentToStore = {
@@ -1022,9 +1021,11 @@ export function ReviewExport() {
               ? 'Invalid API key. Check your AI provider key in Setup.'
               : errorMsg.includes('429') || errorMsg.includes('rate limit')
                 ? 'API rate limit hit. Wait 30s and retry.'
-                : errorMsg.includes('empty content')
-                  ? 'AI returned empty content. Try switching to a different model (e.g., Gemini → GPT-4o).'
-                  : errorMsg;
+            : errorMsg.includes('empty content')
+              ? 'AI returned empty content. Try switching to a different model (e.g., Gemini → GPT-4o).'
+              : errorMsg.includes('INCOMPLETE_ARTICLE')
+                ? errorMsg.replace(/^.*INCOMPLETE_ARTICLE:\s*/, 'Incomplete article: ')
+                : errorMsg;
         console.error(`[ReviewExport] Generation failed for "${item.title}":`, errorMsg, error);
         toast.error(`Generation failed: ${friendlyMsg.slice(0, 150)}`);
         updateContentItem(item.id, { status: 'error', error: friendlyMsg });
