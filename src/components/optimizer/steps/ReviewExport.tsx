@@ -883,6 +883,8 @@ export function ReviewExport() {
         // Mark all steps complete
         setGenerationSteps(prev => prev.map(s => ({ ...s, status: 'completed' })));
 
+        assertEnterpriseArticleComplete(result);
+
         // Build content object for storage and database
         const contentToStore = {
           id: result.id,
@@ -893,7 +895,7 @@ export function ReviewExport() {
           slug: result.slug,
           primaryKeyword: result.primaryKeyword,
           secondaryKeywords: result.secondaryKeywords,
-          wordCount: result.metrics.wordCount,
+          wordCount: Number(result.metrics.wordCount || countPlainWords(result.content)),
           qualityScore: {
             overall: result.qualityScore.overall,
             readability: result.qualityScore.readability,
@@ -954,7 +956,8 @@ export function ReviewExport() {
         updateContentItem(item.id, {
           status: 'completed',
           content: result.content,
-          wordCount: result.metrics.wordCount,
+          wordCount: Number(result.metrics.wordCount || countPlainWords(result.content)),
+          error: undefined,
         });
 
         setGeneratingItems(prev => prev.map(gi =>
