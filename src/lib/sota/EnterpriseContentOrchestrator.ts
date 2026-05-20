@@ -1863,6 +1863,11 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
     this.log('✅ All phases complete. Assembling final result...');
 
     const wordCount = html.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
+    const h2Count = (html.match(/<h2\b/gi) || []).length;
+    const paragraphCount = (html.match(/<p\b/gi) || []).length;
+    if (wordCount < MIN_ENTERPRISE_WORD_COUNT || html.length < MIN_VALID_CONTENT_LENGTH || h2Count < 5 || paragraphCount < 10 || !/<article\b/i.test(html) || !/<\/article>/i.test(html)) {
+      throw new Error(`INCOMPLETE_ARTICLE: Final output failed enterprise completeness checks (${wordCount} words, ${html.length} chars, ${h2Count} H2s, ${paragraphCount} paragraphs). Nothing was saved.`);
+    }
 
     return {
       id: crypto.randomUUID(),
