@@ -100,7 +100,8 @@ const NW_HARD_LIMIT_MS = 50 * 1000;       // fail open and continue without NW
 // The NW query must be in one of these statuses before we consider data valid
 const NW_READY_STATUSES = new Set(['done', 'ready', 'completed', 'finished', 'analysed', 'analyzed']);
 
-const MIN_VALID_CONTENT_LENGTH = 1200;
+const MIN_VALID_CONTENT_LENGTH = 9000;
+const MIN_ENTERPRISE_WORD_COUNT = 1800;
 const PIPELINE_HARD_LIMIT_MS = 10 * 60 * 1000;
 const OPTIONAL_PHASE_MIN_REMAINING_MS = 2 * 60 * 1000;
 const MASTER_GENERATION_TIMEOUT_MS = 3 * 60 * 1000;
@@ -1457,14 +1458,15 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
         type: 'article-html',
         requireCompleteArticle: true,
         minChars: MIN_VALID_CONTENT_LENGTH,
-        minWords: Math.min(1400, Math.max(700, Math.floor(targetWordCount * 0.35))),
+        minWords: Math.min(2200, Math.max(MIN_ENTERPRISE_WORD_COUNT, Math.floor(targetWordCount * 0.65))),
       },
     });
 
     let html = genResult.content;
 
-    if (!html || html.trim().length < MIN_VALID_CONTENT_LENGTH) {
-      throw new Error(`AI returned insufficient content (${html?.length || 0} chars). Try switching to a different model.`);
+    const initialWordCount = html.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
+    if (!html || html.trim().length < MIN_VALID_CONTENT_LENGTH || initialWordCount < MIN_ENTERPRISE_WORD_COUNT) {
+      throw new Error(`AI returned insufficient content (${initialWordCount} words, ${html?.length || 0} chars). The article was not saved because it is not enterprise-grade complete.`);
     }
 
     // ── Phase 5: NeuronWriter Term Enforcement (THE CRITICAL FIX) ─────────
@@ -1861,6 +1863,11 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
     this.log('✅ All phases complete. Assembling final result...');
 
     const wordCount = html.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
+    const h2Count = (html.match(/<h2\b/gi) || []).length;
+    const paragraphCount = (html.match(/<p\b/gi) || []).length;
+    if (wordCount < MIN_ENTERPRISE_WORD_COUNT || html.length < MIN_VALID_CONTENT_LENGTH || h2Count < 5 || paragraphCount < 10 || !/<article\b/i.test(html) || !/<\/article>/i.test(html)) {
+      throw new Error(`INCOMPLETE_ARTICLE: Final output failed enterprise completeness checks (${wordCount} words, ${html.length} chars, ${h2Count} H2s, ${paragraphCount} paragraphs). Nothing was saved.`);
+    }
 
     return {
       id: crypto.randomUUID(),

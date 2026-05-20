@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useOptimizerStore, type ContentItem, type GeneratedContentStore, type NeuronWriterDataStore } from "@/lib/store";
 import {
   FileText, Check, X, AlertCircle, Trash2,
@@ -24,6 +24,27 @@ import PublishVerificationChecklist from "../PublishVerificationChecklist";
 import { GenerationProgressModal } from "../GenerationProgressModal";
 import { createAgentRunner, type AgentEvent } from "@/lib/sota/agents";
 import { lintSnippetBait } from "@/lib/sota/aeo/snippetBaitLinter";
+
+const MIN_ENTERPRISE_ARTICLE_WORDS = 1800;
+const MIN_ENTERPRISE_ARTICLE_CHARS = 9000;
+
+function countPlainWords(html: string): number {
+  return (html || '').replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
+}
+
+function assertEnterpriseArticleComplete(result: any): void {
+  const html = String(result?.content || '').trim();
+  const wordCount = Number(result?.metrics?.wordCount || countPlainWords(html));
+  const hasArticle = /<article\b/i.test(html) && /<\/article>/i.test(html);
+  const h2Count = (html.match(/<h2\b/gi) || []).length;
+  const paragraphCount = (html.match(/<p\b/gi) || []).length;
+
+  if (!html || html.length < MIN_ENTERPRISE_ARTICLE_CHARS || wordCount < MIN_ENTERPRISE_ARTICLE_WORDS || !hasArticle || h2Count < 5 || paragraphCount < 10) {
+    throw new Error(
+      `INCOMPLETE_ARTICLE: Generated output failed enterprise completeness checks (${wordCount} words, ${html.length} chars, ${h2Count} H2s, ${paragraphCount} paragraphs). The draft was not saved. Retry with a stronger model or configured fallback.`
+    );
+  }
+}
 
 // Helper to reconstruct GeneratedContent from persisted store (minimal shape for viewer)
 function reconstructGeneratedContent(stored: GeneratedContentStore[string] | undefined): GeneratedContent | null {
@@ -224,6 +245,20 @@ export function ReviewExport() {
   // ── Phase 8: agent pipeline live events ──
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
   const [showAgentModal, setShowAgentModal] = useState(false);
+
+  useEffect(() => {
+    const repaired: string[] = [];
+    for (const item of contentItems) {
+      if (item.status !== 'generating') continue;
+      const stored = generatedContentsStore[item.id];
+      if (stored?.content && stored.wordCount > 0) {
+        updateContentItem(item.id, { status: 'completed', content: stored.content, wordCount: stored.wordCount, error: undefined });
+      } else {
+        repaired.push(item.id);
+      }
+    }
+    repaired.forEach((id) => updateContentItem(id, { status: 'error', error: 'Previous generation stopped before a complete article was saved. Select it and generate again.' }));
+  }, []);
 
   const handleStopGeneration = useCallback(() => {
     userAbortRef.current = true;
@@ -541,7 +576,7 @@ export function ReviewExport() {
   }, []);
 
   const handleGenerate = async () => {
-    const toGenerate = contentItems.filter(i => selectedItems.includes(i.id) && (i.status === 'pending' || i.status === 'error'));
+    const toGenerate = contentItems.filter(i => selectedItems.includes(i.id) && (i.status === 'pending' || i.status === 'error' || (i.status === 'generating' && !generatedContentsStore[i.id]?.content)));
     if (toGenerate.length === 0) return;
 
     // Initialize generation state
@@ -844,8 +879,9 @@ export function ReviewExport() {
         });
         }
 
+        assertEnterpriseArticleComplete(result);
 
-        // Mark all steps complete
+        // Mark all steps complete only after the article passes hard completeness gates.
         setGenerationSteps(prev => prev.map(s => ({ ...s, status: 'completed' })));
 
         // Build content object for storage and database
@@ -858,7 +894,7 @@ export function ReviewExport() {
           slug: result.slug,
           primaryKeyword: result.primaryKeyword,
           secondaryKeywords: result.secondaryKeywords,
-          wordCount: result.metrics.wordCount,
+          wordCount: Number(result.metrics.wordCount || countPlainWords(result.content)),
           qualityScore: {
             overall: result.qualityScore.overall,
             readability: result.qualityScore.readability,
@@ -919,7 +955,8 @@ export function ReviewExport() {
         updateContentItem(item.id, {
           status: 'completed',
           content: result.content,
-          wordCount: result.metrics.wordCount,
+          wordCount: Number(result.metrics.wordCount || countPlainWords(result.content)),
+          error: undefined,
         });
 
         setGeneratingItems(prev => prev.map(gi =>
@@ -984,9 +1021,11 @@ export function ReviewExport() {
               ? 'Invalid API key. Check your AI provider key in Setup.'
               : errorMsg.includes('429') || errorMsg.includes('rate limit')
                 ? 'API rate limit hit. Wait 30s and retry.'
-                : errorMsg.includes('empty content')
-                  ? 'AI returned empty content. Try switching to a different model (e.g., Gemini → GPT-4o).'
-                  : errorMsg;
+            : errorMsg.includes('empty content')
+              ? 'AI returned empty content. Try switching to a different model (e.g., Gemini → GPT-4o).'
+              : errorMsg.includes('INCOMPLETE_ARTICLE')
+                ? errorMsg.replace(/^.*INCOMPLETE_ARTICLE:\s*/, 'Incomplete article: ')
+                : errorMsg;
         console.error(`[ReviewExport] Generation failed for "${item.title}":`, errorMsg, error);
         toast.error(`Generation failed: ${friendlyMsg.slice(0, 150)}`);
         updateContentItem(item.id, { status: 'error', error: friendlyMsg });
@@ -1636,12 +1675,14 @@ export function ReviewExport() {
       />
 
       {/* Content Viewer Panel */}
-      {viewingItem && (
+      {viewingItem && (() => {
+        const liveViewingItem = contentItems.find(i => i.id === viewingItem.id) || viewingItem;
+        return (
         <ContentViewerPanel
-          item={viewingItem}
-          generatedContent={reconstructGeneratedContent(generatedContentsStore[viewingItem.id])}
-          neuronData={reconstructNeuronData(neuronWriterDataStore[viewingItem.id])}
-          factCheckV2={generatedContentsStore[viewingItem.id]?.factCheckV2 ?? null}
+          item={liveViewingItem}
+          generatedContent={reconstructGeneratedContent(generatedContentsStore[liveViewingItem.id])}
+          neuronData={reconstructNeuronData(neuronWriterDataStore[liveViewingItem.id])}
+          factCheckV2={generatedContentsStore[liveViewingItem.id]?.factCheckV2 ?? null}
           onClose={() => setViewingItem(null)}
           onPrevious={handlePreviousItem}
           onNext={handleNextItem}
@@ -1655,7 +1696,8 @@ export function ReviewExport() {
             }
           }}
         />
-      )}
+        );
+      })()}
 
       {/* ── Bulk Publish Modal ── */}
       {showBulkPublishModal && (

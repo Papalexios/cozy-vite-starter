@@ -82,7 +82,7 @@ Return ONLY the full HTML article.`;
       maxRetries: 2,
       allowContinuations: true,
       allowResume: true,
-      validation: { type: 'article-html', requireCompleteArticle: true, minWords: 1500 },
+      validation: { type: 'article-html', requireCompleteArticle: true, minWords: Math.max(1800, Math.floor(outline.targetWords * 0.75)), minChars: 9000 },
     });
 
     const html = result?.content || '';
