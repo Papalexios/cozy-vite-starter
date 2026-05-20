@@ -13,6 +13,7 @@ import { EnhancedGenerationModal, type GenerationStep } from "../EnhancedGenerat
 import { ContentIntelligenceDashboard } from "../ContentIntelligenceDashboard";
 import { PerformanceFeedbackPanel } from "../PerformanceFeedbackPanel";
 import { GenerativeLiftPanel } from "../GenerativeLiftPanel";
+import { AEOLinterPanel } from "../AEOLinterPanel";
 import { useSupabaseSyncContext } from "@/providers/SupabaseSyncProvider";
 import { useWordPressPublish } from "@/hooks/useWordPressPublish";
 import { rollbackToRevision } from "@/lib/wordpress/rollback";
@@ -1511,6 +1512,17 @@ export function ReviewExport() {
           <div className="bg-card border border-border rounded-2xl p-6">
             <GenerativeLiftPanel />
           </div>
+          {(() => {
+            // Phase 9 — show AEO linter for the most recently generated article
+            const entries = Object.values(generatedContentsStore || {});
+            const latest = entries.sort((a: any, b: any) => (new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime()))[0] as any;
+            if (!latest?.content) return null;
+            return (
+              <div className="bg-card border border-border rounded-2xl p-6">
+                <AEOLinterPanel html={latest.content} />
+              </div>
+            );
+          })()}
           <div className="bg-card border border-border rounded-2xl p-6">
             <PerformanceFeedbackPanel />
           </div>
