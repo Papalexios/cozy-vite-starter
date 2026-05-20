@@ -1970,6 +1970,7 @@ export function ContentStrategy() {
           </div>
         )}
       </div>
+      <ClusterPlannerModal open={clusterModalOpen} onClose={() => setClusterModalOpen(false)} />
     </div>
   );
 }
