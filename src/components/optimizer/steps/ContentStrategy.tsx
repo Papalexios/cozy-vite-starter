@@ -25,6 +25,7 @@ const tabs = [
   { id: "single", label: "📝 Single Article", icon: FileText, desc: "Full-control generation" },
   { id: "godmode", label: "⚡ God Mode 2.0", icon: Bot, desc: "Autonomous engine" },
   { id: "gap", label: "🎯 Gap Analysis", icon: Target, desc: "SERP competitive intel" },
+  { id: "clusters", label: "🕸️ Clusters", icon: Network, desc: "Topical authority planner" },
   { id: "refresh", label: "🔄 Quick Refresh", icon: RefreshCw, desc: "Update existing content" },
   { id: "hub", label: "🗂️ Content Hub", icon: FolderOpen, desc: "Sitemap crawling" },
 ];
