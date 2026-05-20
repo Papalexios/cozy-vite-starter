@@ -246,6 +246,20 @@ export function ReviewExport() {
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
   const [showAgentModal, setShowAgentModal] = useState(false);
 
+  useEffect(() => {
+    const repaired: string[] = [];
+    for (const item of contentItems) {
+      if (item.status !== 'generating') continue;
+      const stored = generatedContentsStore[item.id];
+      if (stored?.content && stored.wordCount > 0) {
+        updateContentItem(item.id, { status: 'completed', content: stored.content, wordCount: stored.wordCount, error: undefined });
+      } else {
+        repaired.push(item.id);
+      }
+    }
+    repaired.forEach((id) => updateContentItem(id, { status: 'error', error: 'Previous generation stopped before a complete article was saved. Select it and generate again.' }));
+  }, []);
+
   const handleStopGeneration = useCallback(() => {
     userAbortRef.current = true;
     try { orchestratorRef.current?.abort('user clicked STOP'); } catch { /* noop */ }
@@ -562,7 +576,7 @@ export function ReviewExport() {
   }, []);
 
   const handleGenerate = async () => {
-    const toGenerate = contentItems.filter(i => selectedItems.includes(i.id) && (i.status === 'pending' || i.status === 'error'));
+    const toGenerate = contentItems.filter(i => selectedItems.includes(i.id) && (i.status === 'pending' || i.status === 'error' || (i.status === 'generating' && !generatedContentsStore[i.id]?.content)));
     if (toGenerate.length === 0) return;
 
     // Initialize generation state
