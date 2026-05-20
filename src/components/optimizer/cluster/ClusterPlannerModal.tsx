@@ -11,7 +11,16 @@ import type { ClusterLink, TopicCluster } from '@/lib/sota/clusters/ClusterTypes
 import { ClusterCanvas } from './ClusterCanvas';
 
 export function ClusterPlannerModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { apiKeys, selectedModel } = useOptimizerStore() as any;
+  const config = (useOptimizerStore() as any).config || {};
+  const apiKeys = {
+    geminiApiKey: config.geminiApiKey,
+    openaiApiKey: config.openaiApiKey,
+    anthropicApiKey: config.anthropicApiKey,
+    openrouterApiKey: config.openrouterApiKey,
+    groqApiKey: config.groqApiKey,
+    serperApiKey: config.serperApiKey,
+  };
+  const selectedModel = config.defaultModel || 'gemini';
   const [rootTopic, setRootTopic] = useState('');
   const [audience, setAudience] = useState('');
   const [spokes, setSpokes] = useState(10);
