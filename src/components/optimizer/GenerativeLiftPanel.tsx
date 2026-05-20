@@ -4,7 +4,7 @@
 // for every generated article that has an `informationGain` payload.
 
 import { useMemo, useState } from "react";
-import { useContentStore } from "@/lib/store";
+import { useOptimizerStore, type GeneratedContentStore } from "@/lib/store";
 import { Sparkles, AlertTriangle, Target, Lightbulb, Database } from "lucide-react";
 
 function scoreColor(score: number) {
@@ -14,11 +14,12 @@ function scoreColor(score: number) {
 }
 
 export function GenerativeLiftPanel() {
-  const generated = useContentStore((s) => s.generatedContentsStore);
+  const generated = useOptimizerStore((s) => s.generatedContentsStore);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
 
   const items = useMemo(() => {
-    return Object.entries(generated)
+    const entries = Object.entries(generated) as Array<[string, GeneratedContentStore[string]]>;
+    return entries
       .filter(([, c]) => !!c?.informationGain)
       .map(([id, c]) => ({ id, title: c.title || c.primaryKeyword, ig: c.informationGain! }))
       .sort((a, b) => b.ig.liftScore - a.ig.liftScore);
