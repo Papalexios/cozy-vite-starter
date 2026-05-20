@@ -164,6 +164,18 @@ export interface GeneratedContent {
 
   // 🆕 NEW: Post-processing metadata
   postProcessing?: PostProcessingResult;
+
+  // Phase 7 — GEO Information Gain analysis (cached SERP + outline diff)
+  informationGain?: {
+    keyword: string;
+    liftScore: number;
+    blindspots: string[];
+    missingEntities: Array<{ name: string; wikidataUrl?: string }>;
+    contrarianAngles: string[];
+    competitorUrls: string[];
+    cached: boolean;
+    generatedAt: string;
+  };
 }
 
 export interface YouTubeVideo {

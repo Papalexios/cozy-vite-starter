@@ -1818,6 +1818,46 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
       }
     }
 
+    // ── Phase 12: GEO Information Gain (post-assembly, semantic-cached) ───────
+    let informationGain: any = undefined;
+    try {
+      const { runInformationGain } = await import('./geo/InformationGainEngine');
+      const outlineChunks: string[] = [];
+      const headingRegex = /<h([23])[^>]*>([\s\S]*?)<\/h\1>/gi;
+      let m: RegExpExecArray | null;
+      while ((m = headingRegex.exec(html)) !== null) {
+        const text = m[2].replace(/<[^>]*>/g, '').trim();
+        if (text) outlineChunks.push(text);
+        if (outlineChunks.length >= 30) break;
+      }
+      // Add lead paragraphs for richer outline embedding
+      const leadP = (html.match(/<p[^>]*>([\s\S]*?)<\/p>/gi) || [])
+        .slice(0, 5)
+        .map((p) => p.replace(/<[^>]*>/g, '').trim())
+        .filter((t) => t.length > 40);
+      outlineChunks.push(...leadP);
+
+      this.log('Phase 12: GEO Information Gain analysis (cached SERP + outline diff)...');
+      const igReport = await this.withTimeout(
+        'Phase 12 Information Gain',
+        runInformationGain({
+          keyword: options.keyword,
+          country: (options as any).country || 'us',
+          outlineChunks,
+          serpAnalysis,
+          serpAnalyzer: this.serpAnalyzer,
+        }),
+        25_000,
+        null as any,
+      );
+      if (igReport) {
+        informationGain = igReport;
+        this.log(`Phase 12 ✅ Lift score ${igReport.liftScore}/100 (blindspots=${igReport.blindspots.length}, missing entities=${igReport.missingEntities.length}, cached=${igReport.cached}).`);
+      }
+    } catch (e) {
+      this.warn(`Phase 12: Information Gain skipped (${e instanceof Error ? e.message : e}).`);
+    }
+
     this.log('✅ All phases complete. Assembling final result...');
 
     const wordCount = html.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
@@ -1893,6 +1933,7 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
       telemetry: this.telemetry,
       checklist,
       factCheckV2,
+      informationGain,
     } as any;
   }
 }

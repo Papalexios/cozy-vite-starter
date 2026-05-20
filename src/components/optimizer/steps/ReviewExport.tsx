@@ -12,6 +12,7 @@ import { ContentViewerPanel } from "../ContentViewerPanel";
 import { EnhancedGenerationModal, type GenerationStep } from "../EnhancedGenerationModal";
 import { ContentIntelligenceDashboard } from "../ContentIntelligenceDashboard";
 import { PerformanceFeedbackPanel } from "../PerformanceFeedbackPanel";
+import { GenerativeLiftPanel } from "../GenerativeLiftPanel";
 import { useSupabaseSyncContext } from "@/providers/SupabaseSyncProvider";
 import { useWordPressPublish } from "@/hooks/useWordPressPublish";
 import { rollbackToRevision } from "@/lib/wordpress/rollback";
@@ -785,6 +786,7 @@ export function ReviewExport() {
             blockingReasons: (result as any).factCheckV2.blockingReasons,
             claims: (result as any).factCheckV2.claims,
           } : undefined,
+          informationGain: (result as any).informationGain || undefined,
         };
 
         // Store the generated content in persisted store (survives navigation)
@@ -1419,6 +1421,9 @@ export function ReviewExport() {
         <div className="space-y-4">
           <div className="bg-card border border-border rounded-2xl p-6">
             <ContentIntelligenceDashboard />
+          </div>
+          <div className="bg-card border border-border rounded-2xl p-6">
+            <GenerativeLiftPanel />
           </div>
           <div className="bg-card border border-border rounded-2xl p-6">
             <PerformanceFeedbackPanel />
