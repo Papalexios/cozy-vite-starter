@@ -146,6 +146,17 @@ export interface GeneratedContentStore {
         reason?: string;
       }>;
     };
+    /** Phase 7 — GEO Information Gain report (semantic-cached SERP diff). */
+    informationGain?: {
+      keyword: string;
+      liftScore: number;
+      blindspots: string[];
+      missingEntities: Array<{ name: string; wikidataUrl?: string }>;
+      contrarianAngles: string[];
+      competitorUrls: string[];
+      cached: boolean;
+      generatedAt: string;
+    };
   };
 }
 
