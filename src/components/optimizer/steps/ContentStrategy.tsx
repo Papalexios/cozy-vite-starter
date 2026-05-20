@@ -121,6 +121,7 @@ function SectionHeader({ icon: Icon, title, subtitle, gradient }: {
 
 export function ContentStrategy() {
   const [activeTab, setActiveTab] = useState("bulk");
+  const [clusterModalOpen, setClusterModalOpen] = useState(false);
   const {
     config: appConfig,
     godModeEnabled, setGodModeEnabled,
