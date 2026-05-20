@@ -17,6 +17,7 @@ import { crawlSitemapUrls, type SitemapCrawlProgress } from "@/lib/sitemap/crawl
 import { fetchSitemapTextRaced } from "@/lib/sitemap/fetchSitemapText";
 import { discoverWordPressUrls } from "@/lib/sitemap/wordpressDiscovery";
 import { GodModeDashboard } from "../GodModeDashboard";
+import { ClusterPlannerModal } from "../cluster/ClusterPlannerModal";
 
 // ─── Tab Configuration ──────────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ const tabs = [
   { id: "single", label: "📝 Single Article", icon: FileText, desc: "Full-control generation" },
   { id: "godmode", label: "⚡ God Mode 2.0", icon: Bot, desc: "Autonomous engine" },
   { id: "gap", label: "🎯 Gap Analysis", icon: Target, desc: "SERP competitive intel" },
+  { id: "clusters", label: "🕸️ Clusters", icon: Network, desc: "Topical authority planner" },
   { id: "refresh", label: "🔄 Quick Refresh", icon: RefreshCw, desc: "Update existing content" },
   { id: "hub", label: "🗂️ Content Hub", icon: FolderOpen, desc: "Sitemap crawling" },
 ];
@@ -119,6 +121,7 @@ function SectionHeader({ icon: Icon, title, subtitle, gradient }: {
 
 export function ContentStrategy() {
   const [activeTab, setActiveTab] = useState("bulk");
+  const [clusterModalOpen, setClusterModalOpen] = useState(false);
   const {
     config: appConfig,
     godModeEnabled, setGodModeEnabled,
@@ -1245,6 +1248,23 @@ export function ContentStrategy() {
         {/* ════════════════════════════════════════════════════════════════ */}
         {activeTab === "godmode" && <GodModeDashboard />}
 
+        {activeTab === "clusters" && (
+          <div className="space-y-4">
+            <SectionHeader
+              icon={Network}
+              title="Topical Cluster Planner"
+              subtitle="Generate a pillar + spokes with cosine-linked internal anchors (Phase 10)."
+              gradient="bg-gradient-to-br from-cyan-500/60 to-emerald-600/40"
+            />
+            <button
+              onClick={() => setClusterModalOpen(true)}
+              className="w-full px-6 py-4 bg-gradient-to-r from-cyan-600 to-emerald-600 text-white font-bold text-lg rounded-2xl hover:brightness-110 transition-all shadow-lg flex items-center justify-center gap-3"
+            >
+              <Sparkles className="w-5 h-5" /> Open Cluster Planner
+            </button>
+          </div>
+        )}
+
         {/* ════════════════════════════════════════════════════════════════ */}
         {/* GAP ANALYSIS                                                    */}
         {/* ════════════════════════════════════════════════════════════════ */}
@@ -1950,6 +1970,7 @@ export function ContentStrategy() {
           </div>
         )}
       </div>
+      <ClusterPlannerModal open={clusterModalOpen} onClose={() => setClusterModalOpen(false)} />
     </div>
   );
 }
