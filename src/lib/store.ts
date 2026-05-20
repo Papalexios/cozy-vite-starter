@@ -215,6 +215,11 @@ export interface AppConfig {
   enableGeoTargeting: boolean;
   targetCountry: string;
   targetLanguage: string;
+  /** Phase 8 — opt-in: route Single Article generation through the 4-agent
+   *  pipeline (Researcher → Architect → Copywriter → Critic) instead of the
+   *  full EnterpriseContentOrchestrator. Skips schema, internal-link, fact-check
+   *  and GEO post-processing — experimental fast path. */
+  useAgentPipeline?: boolean;
 }
 
 interface OptimizerStore {
@@ -424,6 +429,7 @@ export const useOptimizerStore = create<OptimizerStore>()(
         enableGeoTargeting: false,
         targetCountry: 'US',
         targetLanguage: 'en',
+        useAgentPipeline: false,
       },
       setConfig: (updates) => set((state) => ({
         config: { ...state.config, ...updates }
