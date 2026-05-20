@@ -26,17 +26,18 @@ export class ResearcherAgent implements Agent<void, ResearchBundle> {
     const ytService = createYouTubeService(serperKey);
 
     emit(`SERP scan: "${plan.keyword}"`);
-    const serp = await serpAnalyzer.analyze(plan.keyword).catch((e) => {
+    const serp = await serpAnalyzer.analyze(plan.keyword).catch((e: any) => {
       emit(`SERP failed: ${e?.message || e}`);
       return null;
     });
 
     emit('Gathering references (8-12 authoritative sources)');
-    const rawRefs = await refService.gather(plan.keyword, 12).catch(() => []);
-    const references = gateReferences(rawRefs);
+    const rawRefs = await refService.getTopReferences(plan.keyword, 12).catch(() => []);
+    const gated = await gateReferences(rawRefs as any).catch(() => ({ kept: rawRefs as any, rejected: [] }));
+    const references = (gated as any)?.kept ?? rawRefs;
 
     emit('Discovering YouTube videos (1-3 best matches)');
-    const videos = await ytService.discover(plan.keyword, 3).catch(() => []);
+    const videos = await ytService.searchVideos(plan.keyword, 3).catch(() => []);
 
     return {
       serp,

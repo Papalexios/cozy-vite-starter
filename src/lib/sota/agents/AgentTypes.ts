@@ -8,13 +8,22 @@
 import type {
   APIKeys,
   AIModel,
-  ContentPlan,
   GeneratedContent,
   SERPAnalysis,
   Reference,
   YouTubeVideo,
-  QualityScore,
 } from '../types';
+
+// Single-article plan input for the agent pipeline. Distinct from the
+// cluster-style ContentPlan in types.ts which is for Bulk Planner.
+export interface AgentPlan {
+  keyword: string;
+  title?: string;
+  targetAudience?: string;
+  tone?: string;
+  targetWordCount?: number;
+  metaDescription?: string;
+}
 
 export type AgentName = 'researcher' | 'architect' | 'copywriter' | 'critic';
 
@@ -32,7 +41,7 @@ export interface AgentEvent {
 export type AgentProgress = (event: AgentEvent) => void;
 
 export interface AgentContext {
-  plan: ContentPlan;
+  plan: AgentPlan;
   apiKeys: APIKeys;
   model: AIModel;
   serperKey?: string;
