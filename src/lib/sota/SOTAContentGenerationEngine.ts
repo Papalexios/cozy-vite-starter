@@ -83,9 +83,8 @@ function isUnsafeOpenRouterLongFormModel(modelId: string): boolean {
 // what a 3000-word article needs. When that happens the API returns
 // finish_reason="length" with a partial body. Instead of failing the whole
 // pipeline, we automatically continue the assistant turn and stitch.
-// HARD CAP: limited to 1 by default. More continuations produced multi-hour
-// runs on slow OpenRouter/community models; better to finalize a complete-enough
-// article with warnings than silently keep extending.
+// HARD CAP: bounded so slow OpenRouter/community models can finish real articles
+// without turning one job into an endless loop.
 const MAX_CONTINUATIONS = 4;
 
 export interface ExtendedAPIKeys extends APIKeys {
