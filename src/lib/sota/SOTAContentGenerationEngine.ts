@@ -86,7 +86,7 @@ function isUnsafeOpenRouterLongFormModel(modelId: string): boolean {
 // HARD CAP: limited to 1 by default. More continuations produced multi-hour
 // runs on slow OpenRouter/community models; better to finalize a complete-enough
 // article with warnings than silently keep extending.
-const MAX_CONTINUATIONS = 1;
+const MAX_CONTINUATIONS = 4;
 
 export interface ExtendedAPIKeys extends APIKeys {
   openrouterModelId?: string;
@@ -474,21 +474,6 @@ export class SOTAContentGenerationEngine {
 
         // If the provider truncated, transparently continue the turn before validating.
         providerResult = await this.continueIfTruncated(providerResult, params, config, apiKey, finalMaxTokens, providerTimeout);
-
-        if (
-          params.validation?.requireCompleteArticle &&
-          providerResult.finishReason &&
-          TRUNCATED_FINISH_REASONS.has(providerResult.finishReason) &&
-          providerResult.content &&
-          providerResult.content.length >= Math.max(params.validation.minChars ?? 0, 1200)
-        ) {
-          this.log(`Completing truncated article locally after provider limit (${providerResult.finishReason}) to avoid another long LLM loop.`);
-          providerResult = {
-            ...providerResult,
-            content: this.completePartialArticle(providerResult.content),
-            finishReason: 'stop',
-          };
-        }
 
         this.validateGeneration(providerResult.content, params, providerResult.finishReason, config.modelId);
 
