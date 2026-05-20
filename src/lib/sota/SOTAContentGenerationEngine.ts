@@ -56,6 +56,29 @@ const DEFAULT_MODEL_CONFIGS: Record<AIModel, ModelConfig> = {
   },
 };
 
+const OPENROUTER_LONGFORM_SAFE_MODEL = 'anthropic/claude-3.5-sonnet';
+const LONGFORM_UNSAFE_OPENROUTER_PATTERNS = [
+  /:free$/i,
+  /deepseek\/deepseek-v4-flash/i,
+  /deepseek.*flash/i,
+  /openrouter\/owl-alpha/i,
+  /owl-alpha/i,
+  /tencent\/hy3/i,
+];
+
+function requiresLongFormArticle(params: GenerationParams): boolean {
+  return !!(
+    params.validation?.requireCompleteArticle ||
+    params.validation?.type === 'article-html' ||
+    (params.validation?.minWords ?? 0) >= 800 ||
+    (params.validation?.minChars ?? 0) >= 5000
+  );
+}
+
+function isUnsafeOpenRouterLongFormModel(modelId: string): boolean {
+  return LONGFORM_UNSAFE_OPENROUTER_PATTERNS.some(pattern => pattern.test(modelId));
+}
+
 // Free / community OpenRouter backends often cap a single response well below
 // what a 3000-word article needs. When that happens the API returns
 // finish_reason="length" with a partial body. Instead of failing the whole
@@ -399,6 +422,9 @@ export class SOTAContentGenerationEngine {
     if (!apiKey) throw new Error(`No API key configured for ${model}`);
 
     const config = (this.modelConfigs[model] || DEFAULT_MODEL_CONFIGS[model]) as ModelConfig;
+    if (model === 'openrouter' && requiresLongFormArticle(params) && isUnsafeOpenRouterLongFormModel(config.modelId)) {
+      throw new Error(`MODEL_INCOMPATIBLE: openrouter/${config.modelId} is blocked for full-length article generation because it is a free/flash/community route that routinely returns partial drafts. Use ${OPENROUTER_LONGFORM_SAFE_MODEL}, OpenAI GPT-4o, Claude Sonnet, Gemini Flash, or add a stronger fallback in Setup.`);
+    }
     const cacheKey = `${model}:${config.modelId}:${simpleHash(prompt)}:${simpleHash(systemPrompt || '')}`;
     const cached = generationCache.get<GenerationResult>(cacheKey);
     if (cached) {

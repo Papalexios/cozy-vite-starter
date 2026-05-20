@@ -35,6 +35,10 @@ const GROQ_MODELS = [
   { id: 'llama3-groq-70b-8192-tool-use-preview', name: 'Llama 3 70B Tool Use' },
 ];
 
+const UNSAFE_LONGFORM_OPENROUTER_PATTERNS = [/:free$/i, /deepseek\/deepseek-v4-flash/i, /deepseek.*flash/i, /owl-alpha/i, /tencent\/hy3/i];
+const isUnsafeLongformOpenRouterModel = (modelId: string) =>
+  UNSAFE_LONGFORM_OPENROUTER_PATTERNS.some(pattern => pattern.test(modelId));
+
 export function SetupConfig() {
   const {
     config,
@@ -311,6 +315,10 @@ export function SetupConfig() {
     if (value === 'custom') {
       setShowCustomOpenRouter(true);
     } else {
+      if (isUnsafeLongformOpenRouterModel(value)) {
+        toast.error('That OpenRouter model is blocked for full-length articles. Choose Claude, GPT-4o, Gemini, or another paid long-context model.');
+        return;
+      }
       setShowCustomOpenRouter(false);
       setConfig({ openrouterModelId: value });
     }
@@ -327,7 +335,12 @@ export function SetupConfig() {
 
   const handleCustomOpenRouterSubmit = () => {
     if (customOpenRouterModel.trim()) {
-      setConfig({ openrouterModelId: customOpenRouterModel.trim() });
+      const modelId = customOpenRouterModel.trim();
+      if (isUnsafeLongformOpenRouterModel(modelId)) {
+        toast.error('That OpenRouter model is blocked for full-length articles. Use anthropic/claude-3.5-sonnet or openai/gpt-4o instead.');
+        return;
+      }
+      setConfig({ openrouterModelId: modelId });
     }
   };
 
@@ -1051,6 +1064,10 @@ export function SetupConfig() {
                 onClick={() => {
                   const modelId = fbShowCustom ? fbCustomModelId.trim() : fbModelId.trim();
                   if (!modelId) return;
+                  if (fbProvider === 'openrouter' && isUnsafeLongformOpenRouterModel(modelId)) {
+                    toast.error('That OpenRouter fallback is blocked for full-length articles. Add Claude, GPT-4o, Gemini, or another paid long-context model.');
+                    return;
+                  }
                   const entry = `${fbProvider}:${modelId}`;
                   if ((config.fallbackModels || []).includes(entry)) {
                     toast.error('This fallback model is already added.');
