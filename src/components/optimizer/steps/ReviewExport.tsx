@@ -505,7 +505,7 @@ export function ReviewExport() {
     } else {
       toast.error(`Failed to publish all ${errorCount} posts`);
     }
-  }, [publishableSelected, allPublishable, wpConfigured, generatedContentsStore, publish, bulkPublishStatus, setGeneratedContent, pubFeaturedImageUrl, pubFeaturedImageAlt, pubCategoryNames, pubTagNames, pubScheduledDate, pubCanonicalUrl]);
+  }, [publishableSelected, allPublishable, wpConfigured, generatedContentsStore, publish, bulkPublishStatus, setGeneratedContent, pubFeaturedImageUrl, pubFeaturedImageAlt, pubCategoryNames, pubTagNames, pubScheduledDate, pubCanonicalUrl, aeoStatusById]);
 
   const toggleSelect = (id: string) => {
     setSelectedItems(prev =>
