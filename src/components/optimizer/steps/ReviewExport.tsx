@@ -1183,6 +1183,61 @@ export function ReviewExport() {
         </div>
       )}
 
+      {/* Phase 9 — AEO publish gate (hard block for YMYL < 50) */}
+      {aeoHardBlocked.length > 0 && (
+        <div className="glass-card border border-red-500/40 bg-red-500/10 p-5 rounded-2xl flex items-start gap-4">
+          <div className="p-2 bg-red-500/20 rounded-lg">
+            <XCircle className="w-6 h-6 text-red-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-red-300 text-lg mb-1">
+              AEO Gate — {aeoHardBlocked.length} YMYL post{aeoHardBlocked.length === 1 ? '' : 's'} hard-blocked
+            </h3>
+            <p className="text-red-200/80 text-sm mb-2">
+              These YMYL articles score below 50/100 on the AEO snippet-bait linter. Search engines and AI Overviews will not feature them. Fix lead paragraphs (direct answers, &lt;55 words) before publishing.
+            </p>
+            <ul className="text-red-200/90 text-xs space-y-1 max-h-32 overflow-auto">
+              {aeoHardBlocked.slice(0, 5).map((b) => (
+                <li key={b.id} className="truncate">
+                  • <span className="font-semibold">{b.title}</span> — AEO score {b.score}/100
+                </li>
+              ))}
+              {aeoHardBlocked.length > 5 && (
+                <li className="text-red-200/60">…and {aeoHardBlocked.length - 5} more</li>
+              )}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 9 — AEO publish gate (amber warn under 70) */}
+      {aeoWarn.length > 0 && (
+        <div className="glass-card border border-amber-500/30 bg-amber-500/10 p-5 rounded-2xl flex items-start gap-4">
+          <div className="p-2 bg-amber-500/20 rounded-lg">
+            <AlertCircle className="w-6 h-6 text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-amber-300 text-lg mb-1">
+              AEO Warning — {aeoWarn.length} post{aeoWarn.length === 1 ? '' : 's'} below snippet-eligibility threshold
+            </h3>
+            <p className="text-amber-200/80 text-sm mb-2">
+              AEO score &lt; 70 means weak snippet eligibility for AI Overviews, Perplexity, and featured snippets. Publishing is still allowed — open the AEO Linter panel in the article view to auto-fix.
+            </p>
+            <ul className="text-amber-200/90 text-xs space-y-1 max-h-32 overflow-auto">
+              {aeoWarn.slice(0, 5).map((b) => (
+                <li key={b.id} className="truncate">
+                  • <span className="font-semibold">{b.title}</span> — AEO score {b.score}/100{b.isYmyl ? ' · YMYL' : ''}
+                </li>
+              ))}
+              {aeoWarn.length > 5 && (
+                <li className="text-amber-200/60">…and {aeoWarn.length - 5} more</li>
+              )}
+            </ul>
+          </div>
+        </div>
+      )}
+
+
       {/* Action Bar */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
         <div className="flex flex-col sm:flex-row gap-2.5 md:gap-3 w-full md:w-auto">
