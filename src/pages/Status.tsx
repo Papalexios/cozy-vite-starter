@@ -2,10 +2,11 @@
 // Live health-check page for NeuronWriter proxy, WordPress, AI models.
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, XCircle, Loader2, AlertTriangle, ArrowLeft, PlayCircle, ShieldCheck, ExternalLink, GitCompare, RefreshCw } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, AlertTriangle, ArrowLeft, PlayCircle, ShieldCheck, ExternalLink, GitCompare, RefreshCw, Database } from "lucide-react";
 import { useOptimizerStore } from "@/lib/store";
 import { NeuronWriterService } from "@/lib/sota/NeuronWriterService";
 import { createSOTAEngine } from "@/lib/sota/SOTAContentGenerationEngine";
+import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabaseClient";
 import {
   getLatestFactCheckReport,
   loadPersistedFactCheckReport,
@@ -105,6 +106,7 @@ const Status = () => {
   const [wpRoot, setWpRoot] = useState<CheckResult>(initial);
   const [wpAuth, setWpAuth] = useState<CheckResult>(initial);
   const [models, setModels] = useState<Record<string, CheckResult>>({});
+  const [migrations, setMigrations] = useState<Record<string, CheckResult>>({});
 
   // ── NeuronWriter proxy probes ──────────────────────────────────────────────
   async function probeProxy(url: string, setter: (r: CheckResult) => void) {
