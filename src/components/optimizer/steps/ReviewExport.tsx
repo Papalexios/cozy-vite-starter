@@ -1929,6 +1929,14 @@ export function ReviewExport() {
           </div>
         );
       })()}
+
+      {/* Phase 8 — 4-agent pipeline live progress */}
+      <GenerationProgressModal
+        open={showAgentModal}
+        events={agentEvents}
+        onClose={() => setShowAgentModal(false)}
+        title="4-Agent pipeline"
+      />
     </div>
   );
 }
