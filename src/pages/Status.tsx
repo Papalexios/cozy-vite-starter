@@ -2,10 +2,11 @@
 // Live health-check page for NeuronWriter proxy, WordPress, AI models.
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, XCircle, Loader2, AlertTriangle, ArrowLeft, PlayCircle, ShieldCheck, ExternalLink, GitCompare, RefreshCw } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, AlertTriangle, ArrowLeft, PlayCircle, ShieldCheck, ExternalLink, GitCompare, RefreshCw, Database } from "lucide-react";
 import { useOptimizerStore } from "@/lib/store";
 import { NeuronWriterService } from "@/lib/sota/NeuronWriterService";
 import { createSOTAEngine } from "@/lib/sota/SOTAContentGenerationEngine";
+import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabaseClient";
 import {
   getLatestFactCheckReport,
   loadPersistedFactCheckReport,
@@ -105,6 +106,7 @@ const Status = () => {
   const [wpRoot, setWpRoot] = useState<CheckResult>(initial);
   const [wpAuth, setWpAuth] = useState<CheckResult>(initial);
   const [models, setModels] = useState<Record<string, CheckResult>>({});
+  const [migrations, setMigrations] = useState<Record<string, CheckResult>>({});
 
   // ── NeuronWriter proxy probes ──────────────────────────────────────────────
   async function probeProxy(url: string, setter: (r: CheckResult) => void) {
@@ -361,6 +363,51 @@ const Status = () => {
     setModels(Object.fromEntries(entries));
   }
 
+  // ── Database migrations probe (Phase 1-10) ────────────────────────────────
+  // Verifies each migration is applied by SELECTing 1 row from its anchor table.
+  const MIGRATION_TABLES: Array<{ migration: string; table: string; phase: string }> = [
+    { migration: "001_phase1_content_memory",    table: "drafts",          phase: "Phase 1 — Content Memory" },
+    { migration: "002_phase3_job_queue",         table: "content_jobs",    phase: "Phase 3 — Job Queue" },
+    { migration: "003_phase6_feedback_loop",     table: "page_baselines",  phase: "Phase 6 — Feedback Loop" },
+    { migration: "004_phase7_semantic_cache",    table: "serp_cache",      phase: "Phase 7 — GEO / pgvector" },
+    { migration: "005_phase10_clusters",         table: "topic_clusters",  phase: "Phase 10 — Topical Clusters" },
+  ];
+
+  async function checkMigration(table: string): Promise<CheckResult> {
+    if (!isSupabaseConfigured()) {
+      return { status: "warn", message: "Supabase not configured." };
+    }
+    const sb = getSupabaseClient();
+    if (!sb) return { status: "error", message: "Supabase client unavailable." };
+    try {
+      const { result, latencyMs } = await timed(async () =>
+        await sb.from(table).select("*", { count: "exact", head: true }).limit(1)
+      );
+      const { error, count } = result as any;
+      if (error) {
+        const msg = String(error.message || error);
+        if (/relation .* does not exist|could not find the table|schema cache/i.test(msg)) {
+          return { status: "error", latencyMs, message: `Table "${table}" missing — migration not applied.`, detail: msg.slice(0, 300) };
+        }
+        if (/permission denied|rls/i.test(msg)) {
+          return { status: "ok", latencyMs, message: `Table exists (RLS blocked anon select — expected for owner-scoped rows).` };
+        }
+        return { status: "error", latencyMs, message: msg.slice(0, 200) };
+      }
+      return { status: "ok", latencyMs, message: `Table exists${typeof count === "number" ? ` · ${count} row(s)` : ""}.` };
+    } catch (e: any) {
+      return { status: "error", message: e?.message || String(e) };
+    }
+  }
+
+  async function runAllMigrations() {
+    setMigrations(Object.fromEntries(MIGRATION_TABLES.map(m => [m.migration, { status: "running" } as CheckResult])));
+    const entries = await Promise.all(
+      MIGRATION_TABLES.map(async m => [m.migration, await checkMigration(m.table)] as const)
+    );
+    setMigrations(Object.fromEntries(entries));
+  }
+
   const autoRanRef = useRef(false);
   const [factReport, setFactReport] = useState<FactCheckReport | null>(
     () => getLatestFactCheckReport() || loadPersistedFactCheckReport()
@@ -386,6 +433,7 @@ const Status = () => {
     checkWpRoot();
     checkWpAuth();
     runAllModels();
+    runAllMigrations();
   }
 
   return (
@@ -480,6 +528,33 @@ const Status = () => {
             ))}
           </div>
           <Btn onClick={runAllModels}>Check all model providers</Btn>
+        </section>
+
+        <section className="space-y-4">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+            <Database className="w-4 h-4" /> Database migrations
+          </h3>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Each row probes the anchor table for a migration. "Missing" means run that SQL file in the Supabase SQL editor.
+          </p>
+          <div className="grid md:grid-cols-2 gap-4">
+            {MIGRATION_TABLES.map(m => (
+              <Card
+                key={m.migration}
+                title={m.phase}
+                subtitle={`migrations/${m.migration}.sql → ${m.table}`}
+                result={migrations[m.migration] || initial}
+                action={
+                  <Btn variant="ghost" onClick={async () => {
+                    setMigrations(prev => ({ ...prev, [m.migration]: { status: "running" } }));
+                    const r = await checkMigration(m.table);
+                    setMigrations(prev => ({ ...prev, [m.migration]: r }));
+                  }}>Re-check {m.table}</Btn>
+                }
+              />
+            ))}
+          </div>
+          <Btn onClick={runAllMigrations}>Re-check all migrations</Btn>
         </section>
 
         <FactCheckSection report={factReport} />

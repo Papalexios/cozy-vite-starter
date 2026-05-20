@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import PublishVerificationChecklist from "../PublishVerificationChecklist";
 import { GenerationProgressModal } from "../GenerationProgressModal";
 import { createAgentRunner, type AgentEvent } from "@/lib/sota/agents";
+import { lintSnippetBait } from "@/lib/sota/aeo/snippetBaitLinter";
 
 // Helper to reconstruct GeneratedContent from persisted store (minimal shape for viewer)
 function reconstructGeneratedContent(stored: GeneratedContentStore[string] | undefined): GeneratedContent | null {
@@ -349,24 +350,59 @@ export function ReviewExport() {
     return blocked;
   }, [allPublishable, generatedContentsStore]);
 
+  // Phase 9 — AEO publish gate.
+  // Hard block when YMYL && AEO snippet-bait score < 50. Warn when any score < 70.
+  const aeoStatusById = useMemo(() => {
+    const map = new Map<string, { score: number; isYmyl: boolean }>();
+    for (const item of allPublishable) {
+      const stored = generatedContentsStore[item.id];
+      if (!stored?.content) continue;
+      try {
+        const report = lintSnippetBait(stored.content);
+        const isYmyl = !!stored.factCheckV2?.ymyl?.isYmyl;
+        map.set(item.id, { score: report.score, isYmyl });
+      } catch { /* defensive: skip if linter throws on malformed HTML */ }
+    }
+    return map;
+  }, [allPublishable, generatedContentsStore]);
+
+  const aeoHardBlocked = useMemo(
+    () => allPublishable
+      .map(i => ({ item: i, s: aeoStatusById.get(i.id) }))
+      .filter(x => x.s && x.s.isYmyl && x.s.score < 50)
+      .map(x => ({ id: x.item.id, title: x.item.title, score: x.s!.score })),
+    [allPublishable, aeoStatusById]
+  );
+  const aeoWarn = useMemo(
+    () => allPublishable
+      .map(i => ({ item: i, s: aeoStatusById.get(i.id) }))
+      .filter(x => x.s && x.s.score < 70 && !(x.s.isYmyl && x.s.score < 50))
+      .map(x => ({ id: x.item.id, title: x.item.title, score: x.s!.score, isYmyl: x.s!.isYmyl })),
+    [allPublishable, aeoStatusById]
+  );
+
   const [showChecklistReport, setShowChecklistReport] = useState<string | null>(null);
 
   const handleBulkPublish = useCallback(async () => {
     const candidates = publishableSelected.length > 0 ? publishableSelected : allPublishable;
-    // PRE-PUBLISH GATE: block items whose checklist failed OR YMYL fact-check denied publish.
+    // PRE-PUBLISH GATE: block items whose checklist failed, YMYL fact-check denied,
+    // OR AEO score < 50 on a YMYL article (Phase 9 hard gate).
     const itemsToPublish = candidates.filter(item => {
       const stored = generatedContentsStore[item.id];
       const cl = stored?.checklist;
       const fc = stored?.factCheckV2;
       if (cl && !cl.passed) return false;
       if (fc && !fc.publishAllowed) return false;
+      const aeo = aeoStatusById.get(item.id);
+      if (aeo && aeo.isYmyl && aeo.score < 50) return false;
       return true;
     });
     const blocked = candidates.length - itemsToPublish.length;
     if (blocked > 0) {
-      toast.error(`${blocked} post(s) blocked: pre-publish checklist or YMYL fact-check failed. Open the row to see what's missing.`);
+      toast.error(`${blocked} post(s) blocked: pre-publish checklist, YMYL fact-check, or AEO gate failed. Open the row to see what's missing.`);
     }
     if (itemsToPublish.length === 0 || !wpConfigured) return;
+
 
     setIsBulkPublishing(true);
     const items = itemsToPublish.map(item => ({
@@ -469,7 +505,7 @@ export function ReviewExport() {
     } else {
       toast.error(`Failed to publish all ${errorCount} posts`);
     }
-  }, [publishableSelected, allPublishable, wpConfigured, generatedContentsStore, publish, bulkPublishStatus, setGeneratedContent, pubFeaturedImageUrl, pubFeaturedImageAlt, pubCategoryNames, pubTagNames, pubScheduledDate, pubCanonicalUrl]);
+  }, [publishableSelected, allPublishable, wpConfigured, generatedContentsStore, publish, bulkPublishStatus, setGeneratedContent, pubFeaturedImageUrl, pubFeaturedImageAlt, pubCategoryNames, pubTagNames, pubScheduledDate, pubCanonicalUrl, aeoStatusById]);
 
   const toggleSelect = (id: string) => {
     setSelectedItems(prev =>
@@ -1146,6 +1182,61 @@ export function ReviewExport() {
           </div>
         </div>
       )}
+
+      {/* Phase 9 — AEO publish gate (hard block for YMYL < 50) */}
+      {aeoHardBlocked.length > 0 && (
+        <div className="glass-card border border-red-500/40 bg-red-500/10 p-5 rounded-2xl flex items-start gap-4">
+          <div className="p-2 bg-red-500/20 rounded-lg">
+            <XCircle className="w-6 h-6 text-red-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-red-300 text-lg mb-1">
+              AEO Gate — {aeoHardBlocked.length} YMYL post{aeoHardBlocked.length === 1 ? '' : 's'} hard-blocked
+            </h3>
+            <p className="text-red-200/80 text-sm mb-2">
+              These YMYL articles score below 50/100 on the AEO snippet-bait linter. Search engines and AI Overviews will not feature them. Fix lead paragraphs (direct answers, &lt;55 words) before publishing.
+            </p>
+            <ul className="text-red-200/90 text-xs space-y-1 max-h-32 overflow-auto">
+              {aeoHardBlocked.slice(0, 5).map((b) => (
+                <li key={b.id} className="truncate">
+                  • <span className="font-semibold">{b.title}</span> — AEO score {b.score}/100
+                </li>
+              ))}
+              {aeoHardBlocked.length > 5 && (
+                <li className="text-red-200/60">…and {aeoHardBlocked.length - 5} more</li>
+              )}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 9 — AEO publish gate (amber warn under 70) */}
+      {aeoWarn.length > 0 && (
+        <div className="glass-card border border-amber-500/30 bg-amber-500/10 p-5 rounded-2xl flex items-start gap-4">
+          <div className="p-2 bg-amber-500/20 rounded-lg">
+            <AlertCircle className="w-6 h-6 text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-amber-300 text-lg mb-1">
+              AEO Warning — {aeoWarn.length} post{aeoWarn.length === 1 ? '' : 's'} below snippet-eligibility threshold
+            </h3>
+            <p className="text-amber-200/80 text-sm mb-2">
+              AEO score &lt; 70 means weak snippet eligibility for AI Overviews, Perplexity, and featured snippets. Publishing is still allowed — open the AEO Linter panel in the article view to auto-fix.
+            </p>
+            <ul className="text-amber-200/90 text-xs space-y-1 max-h-32 overflow-auto">
+              {aeoWarn.slice(0, 5).map((b) => (
+                <li key={b.id} className="truncate">
+                  • <span className="font-semibold">{b.title}</span> — AEO score {b.score}/100{b.isYmyl ? ' · YMYL' : ''}
+                </li>
+              ))}
+              {aeoWarn.length > 5 && (
+                <li className="text-amber-200/60">…and {aeoWarn.length - 5} more</li>
+              )}
+            </ul>
+          </div>
+        </div>
+      )}
+
 
       {/* Action Bar */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
