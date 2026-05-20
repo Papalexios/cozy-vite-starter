@@ -157,9 +157,9 @@ export function ContentViewerPanel({
   const [editorHistory, setEditorHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  const content = item?.content || '';
+  const content = item?.content || generatedContent?.content || '';
   const hasContent = content.length > 0;
-  const wordCount = item?.wordCount || content.split(/\s+/).filter(Boolean).length;
+  const wordCount = item?.wordCount || generatedContent?.metrics?.wordCount || content.split(/\s+/).filter(Boolean).length;
 
   const sourcePathname = useMemo(() => getPathnameFromUrl(item.url), [item.url]);
   const sourceSlug = useMemo(() => getWordPressPostSlugFromUrl(item.url), [item.url]);
