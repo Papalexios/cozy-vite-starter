@@ -17,6 +17,7 @@ import { crawlSitemapUrls, type SitemapCrawlProgress } from "@/lib/sitemap/crawl
 import { fetchSitemapTextRaced } from "@/lib/sitemap/fetchSitemapText";
 import { discoverWordPressUrls } from "@/lib/sitemap/wordpressDiscovery";
 import { GodModeDashboard } from "../GodModeDashboard";
+import { ClusterPlannerModal } from "../cluster/ClusterPlannerModal";
 
 // ─── Tab Configuration ──────────────────────────────────────────────────────
 
