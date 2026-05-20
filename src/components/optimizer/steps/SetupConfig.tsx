@@ -315,6 +315,10 @@ export function SetupConfig() {
     if (value === 'custom') {
       setShowCustomOpenRouter(true);
     } else {
+      if (isUnsafeLongformOpenRouterModel(value)) {
+        toast.error('That OpenRouter model is blocked for full-length articles. Choose Claude, GPT-4o, Gemini, or another paid long-context model.');
+        return;
+      }
       setShowCustomOpenRouter(false);
       setConfig({ openrouterModelId: value });
     }
@@ -331,7 +335,12 @@ export function SetupConfig() {
 
   const handleCustomOpenRouterSubmit = () => {
     if (customOpenRouterModel.trim()) {
-      setConfig({ openrouterModelId: customOpenRouterModel.trim() });
+      const modelId = customOpenRouterModel.trim();
+      if (isUnsafeLongformOpenRouterModel(modelId)) {
+        toast.error('That OpenRouter model is blocked for full-length articles. Use anthropic/claude-3.5-sonnet or openai/gpt-4o instead.');
+        return;
+      }
+      setConfig({ openrouterModelId: modelId });
     }
   };
 
