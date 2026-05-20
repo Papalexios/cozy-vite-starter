@@ -4,7 +4,6 @@
 // inherit all retry/continuation/validation logic from Phase 1-7.
 
 import { createSOTAEngine } from '../SOTAContentGenerationEngine';
-import { buildMasterSystemPrompt, buildMasterUserPrompt } from '../prompts/masterContentPrompt';
 import type {
   Agent,
   AgentContext,
@@ -34,24 +33,43 @@ export class CopywriterAgent implements Agent<CopywriterInput, DraftBundle> {
 
     const engine = createSOTAEngine(apiKeys);
 
-    const promptConfig: any = {
-      keyword: plan.keyword,
-      title: outline.title,
-      metaDescription: outline.metaDescription,
-      targetAudience: plan.targetAudience || 'industry professionals',
-      tone: plan.tone || 'expert, direct, high-agency',
-      targetWordCount: outline.targetWords,
-      outline: outline.outline,
-      faqs: outline.faqs,
-      contentGaps: research.contentGaps,
-      semanticEntities: research.semanticEntities,
-      references: research.references,
-      videos: research.videos,
-      topCompetitors: research.serp?.topCompetitors || [],
-    };
+    const refsBlock = (research.references || [])
+      .slice(0, 10)
+      .map((r, i) => `${i + 1}. ${r.title} — ${r.url}`)
+      .join('\n');
+    const videosBlock = (research.videos || [])
+      .slice(0, 2)
+      .map((v) => `- ${v.title} (https://www.youtube.com/watch?v=${v.id})`)
+      .join('\n');
+    const outlineBlock = outline.outline.map((h, i) => `${i + 1}. ${h}`).join('\n');
+    const faqsBlock = outline.faqs.map((f, i) => `${i + 1}. ${f}`).join('\n');
 
-    const systemPrompt = buildMasterSystemPrompt(promptConfig);
-    const userPrompt = buildMasterUserPrompt(promptConfig);
+    const systemPrompt = `You are an elite editorial writer producing premium HTML articles.
+Voice: direct, high-agency, Hormozi/Ferriss energy. First-person where natural.
+Output: ONE complete <article>...</article> with semantic HTML5 (h1, h2, h3, p, ul, table, blockquote, figure).
+No "In conclusion", no AI filler. Every section ships specifics: numbers, examples, named entities.`;
+
+    const userPrompt = `Write a ~${outline.targetWords}-word article.
+
+TITLE: ${outline.title}
+META DESCRIPTION: ${outline.metaDescription}
+PRIMARY KEYWORD: ${plan.keyword}
+AUDIENCE: ${plan.targetAudience || 'industry professionals'}
+TONE: ${plan.tone || 'expert, direct'}
+
+OUTLINE (H2s in order):
+${outlineBlock}
+
+FAQs to answer in a dedicated section:
+${faqsBlock}
+
+REFERENCE these sources where appropriate (inline links):
+${refsBlock || '(none)'}
+
+VIDEOS to embed once (use <iframe> for YouTube):
+${videosBlock || '(none)'}
+
+Return ONLY the full HTML article.`;
 
     const result = await engine.generateWithModel({
       prompt: userPrompt,
@@ -67,7 +85,7 @@ export class CopywriterAgent implements Agent<CopywriterInput, DraftBundle> {
       validation: { type: 'article-html', requireCompleteArticle: true, minWords: 1500 },
     });
 
-    const html = result?.content || result?.text || '';
+    const html = result?.content || '';
     return { html, wordCount: countWords(html) };
   }
 }

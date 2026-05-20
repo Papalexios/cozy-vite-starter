@@ -67,7 +67,7 @@ Rules: 8-14 H2 headings, 5-8 FAQs, no fluff sections, no "Conclusion" as a gener
         allowContinuations: false,
         allowResume: false,
       });
-      const parsed = safeJson(res?.content || res?.text || '');
+      const parsed = safeJson(res?.content || '');
       if (parsed?.outline?.length) {
         return {
           title: parsed.title || plan.keyword,

@@ -1,11 +1,8 @@
 // src/components/optimizer/GenerationProgressModal.tsx
 // Phase 8 — Live agent progress modal driven by AgentRunner's AgentEvent stream.
-// Pure presentational; pass the events array in.
+// Plain styled component (no shadcn dialog dependency).
 
-import { CheckCircle2, Loader2, AlertCircle, Circle } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
+import { CheckCircle2, Loader2, AlertCircle, Circle, X } from 'lucide-react';
 import type { AgentEvent, AgentName } from '@/lib/sota/agents';
 
 interface Props {
@@ -37,55 +34,66 @@ function StatusIcon({ status }: { status: AgentEvent['status'] }) {
 }
 
 export function GenerationProgressModal({ open, events, onClose, title = 'Generating content' }: Props) {
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose?.(); }}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+      <div className="w-full max-w-2xl rounded-lg border bg-card shadow-2xl">
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          {onClose && (
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground" aria-label="Close">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
 
-        <div className="grid grid-cols-2 gap-3 my-4">
-          {AGENTS.map((a) => {
-            const s = statusFor(events, a.id);
-            return (
-              <div key={a.id} className="flex items-start gap-3 rounded-lg border bg-card p-3">
-                <StatusIcon status={s} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-sm">{a.label}</p>
-                    <Badge variant={s === 'done' ? 'default' : 'secondary'} className="text-[10px]">{s}</Badge>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            {AGENTS.map((a) => {
+              const s = statusFor(events, a.id);
+              return (
+                <div key={a.id} className="flex items-start gap-3 rounded-lg border bg-background p-3">
+                  <StatusIcon status={s} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium text-sm">{a.label}</p>
+                      <span className="text-[10px] uppercase tracking-wider rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+                        {s}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{a.description}</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">{a.description}</p>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
 
-        <div>
-          <p className="text-xs font-medium text-muted-foreground mb-2">Event log</p>
-          <ScrollArea className="h-64 rounded-md border bg-muted/30 p-3">
-            <ul className="space-y-1 font-mono text-[11px]">
-              {events.slice().reverse().map((e, idx) => (
-                <li key={`${e.timestamp}-${idx}`} className="flex gap-2">
-                  <span className="text-muted-foreground/70 shrink-0">
-                    {new Date(e.timestamp).toLocaleTimeString()}
-                  </span>
-                  <span className="font-semibold capitalize shrink-0 w-20">{e.agent}</span>
-                  <span className="text-foreground/80">{e.message}</span>
-                  {typeof e.elapsedMs === 'number' && (
-                    <span className="text-muted-foreground ml-auto shrink-0">{(e.elapsedMs / 1000).toFixed(1)}s</span>
-                  )}
-                </li>
-              ))}
-              {events.length === 0 && (
-                <li className="text-muted-foreground">Waiting for agents to start…</li>
-              )}
-            </ul>
-          </ScrollArea>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Event log</p>
+            <div className="h-64 overflow-auto rounded-md border bg-muted/30 p-3">
+              <ul className="space-y-1 font-mono text-[11px]">
+                {events.slice().reverse().map((e, idx) => (
+                  <li key={`${e.timestamp}-${idx}`} className="flex gap-2">
+                    <span className="text-muted-foreground/70 shrink-0">
+                      {new Date(e.timestamp).toLocaleTimeString()}
+                    </span>
+                    <span className="font-semibold capitalize shrink-0 w-20">{e.agent}</span>
+                    <span className="text-foreground/80 flex-1">{e.message}</span>
+                    {typeof e.elapsedMs === 'number' && (
+                      <span className="text-muted-foreground ml-auto shrink-0">{(e.elapsedMs / 1000).toFixed(1)}s</span>
+                    )}
+                  </li>
+                ))}
+                {events.length === 0 && (
+                  <li className="text-muted-foreground">Waiting for agents to start…</li>
+                )}
+              </ul>
+            </div>
+          </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
 
