@@ -35,6 +35,10 @@ const GROQ_MODELS = [
   { id: 'llama3-groq-70b-8192-tool-use-preview', name: 'Llama 3 70B Tool Use' },
 ];
 
+const UNSAFE_LONGFORM_OPENROUTER_PATTERNS = [/:free$/i, /deepseek\/deepseek-v4-flash/i, /deepseek.*flash/i, /owl-alpha/i, /tencent\/hy3/i];
+const isUnsafeLongformOpenRouterModel = (modelId: string) =>
+  UNSAFE_LONGFORM_OPENROUTER_PATTERNS.some(pattern => pattern.test(modelId));
+
 export function SetupConfig() {
   const {
     config,
