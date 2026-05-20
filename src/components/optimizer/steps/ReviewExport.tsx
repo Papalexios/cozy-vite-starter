@@ -20,6 +20,8 @@ import { toast } from "sonner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import PublishVerificationChecklist from "../PublishVerificationChecklist";
+import { GenerationProgressModal } from "../GenerationProgressModal";
+import { createAgentRunner, type AgentEvent } from "@/lib/sota/agents";
 
 // Helper to reconstruct GeneratedContent from persisted store (minimal shape for viewer)
 function reconstructGeneratedContent(stored: GeneratedContentStore[string] | undefined): GeneratedContent | null {
@@ -216,6 +218,9 @@ export function ReviewExport() {
   const [generationLog, setGenerationLog] = useState<Array<{ t: number; msg: string; phase?: number; level: 'info' | 'sse' | 'warn' | 'error' }>>([]);
   const orchestratorRef = useRef<{ abort: (reason?: string) => void } | null>(null);
   const userAbortRef = useRef(false);
+  // ── Phase 8: agent pipeline live events ──
+  const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
+  const [showAgentModal, setShowAgentModal] = useState(false);
 
   const handleStopGeneration = useCallback(() => {
     userAbortRef.current = true;
