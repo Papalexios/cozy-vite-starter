@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import PublishVerificationChecklist from "../PublishVerificationChecklist";
 import { GenerationProgressModal } from "../GenerationProgressModal";
 import { createAgentRunner, type AgentEvent } from "@/lib/sota/agents";
+import { lintSnippetBait } from "@/lib/sota/aeo/snippetBaitLinter";
 
 // Helper to reconstruct GeneratedContent from persisted store (minimal shape for viewer)
 function reconstructGeneratedContent(stored: GeneratedContentStore[string] | undefined): GeneratedContent | null {
@@ -349,24 +350,59 @@ export function ReviewExport() {
     return blocked;
   }, [allPublishable, generatedContentsStore]);
 
+  // Phase 9 — AEO publish gate.
+  // Hard block when YMYL && AEO snippet-bait score < 50. Warn when any score < 70.
+  const aeoStatusById = useMemo(() => {
+    const map = new Map<string, { score: number; isYmyl: boolean }>();
+    for (const item of allPublishable) {
+      const stored = generatedContentsStore[item.id];
+      if (!stored?.content) continue;
+      try {
+        const report = lintSnippetBait(stored.content);
+        const isYmyl = !!stored.factCheckV2?.ymyl?.isYmyl;
+        map.set(item.id, { score: report.score, isYmyl });
+      } catch { /* defensive: skip if linter throws on malformed HTML */ }
+    }
+    return map;
+  }, [allPublishable, generatedContentsStore]);
+
+  const aeoHardBlocked = useMemo(
+    () => allPublishable
+      .map(i => ({ item: i, s: aeoStatusById.get(i.id) }))
+      .filter(x => x.s && x.s.isYmyl && x.s.score < 50)
+      .map(x => ({ id: x.item.id, title: x.item.title, score: x.s!.score })),
+    [allPublishable, aeoStatusById]
+  );
+  const aeoWarn = useMemo(
+    () => allPublishable
+      .map(i => ({ item: i, s: aeoStatusById.get(i.id) }))
+      .filter(x => x.s && x.s.score < 70 && !(x.s.isYmyl && x.s.score < 50))
+      .map(x => ({ id: x.item.id, title: x.item.title, score: x.s!.score, isYmyl: x.s!.isYmyl })),
+    [allPublishable, aeoStatusById]
+  );
+
   const [showChecklistReport, setShowChecklistReport] = useState<string | null>(null);
 
   const handleBulkPublish = useCallback(async () => {
     const candidates = publishableSelected.length > 0 ? publishableSelected : allPublishable;
-    // PRE-PUBLISH GATE: block items whose checklist failed OR YMYL fact-check denied publish.
+    // PRE-PUBLISH GATE: block items whose checklist failed, YMYL fact-check denied,
+    // OR AEO score < 50 on a YMYL article (Phase 9 hard gate).
     const itemsToPublish = candidates.filter(item => {
       const stored = generatedContentsStore[item.id];
       const cl = stored?.checklist;
       const fc = stored?.factCheckV2;
       if (cl && !cl.passed) return false;
       if (fc && !fc.publishAllowed) return false;
+      const aeo = aeoStatusById.get(item.id);
+      if (aeo && aeo.isYmyl && aeo.score < 50) return false;
       return true;
     });
     const blocked = candidates.length - itemsToPublish.length;
     if (blocked > 0) {
-      toast.error(`${blocked} post(s) blocked: pre-publish checklist or YMYL fact-check failed. Open the row to see what's missing.`);
+      toast.error(`${blocked} post(s) blocked: pre-publish checklist, YMYL fact-check, or AEO gate failed. Open the row to see what's missing.`);
     }
     if (itemsToPublish.length === 0 || !wpConfigured) return;
+
 
     setIsBulkPublishing(true);
     const items = itemsToPublish.map(item => ({
