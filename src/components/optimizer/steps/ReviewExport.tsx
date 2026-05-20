@@ -1675,12 +1675,14 @@ export function ReviewExport() {
       />
 
       {/* Content Viewer Panel */}
-      {viewingItem && (
+      {viewingItem && (() => {
+        const liveViewingItem = contentItems.find(i => i.id === viewingItem.id) || viewingItem;
+        return (
         <ContentViewerPanel
-          item={viewingItem}
-          generatedContent={reconstructGeneratedContent(generatedContentsStore[viewingItem.id])}
-          neuronData={reconstructNeuronData(neuronWriterDataStore[viewingItem.id])}
-          factCheckV2={generatedContentsStore[viewingItem.id]?.factCheckV2 ?? null}
+          item={liveViewingItem}
+          generatedContent={reconstructGeneratedContent(generatedContentsStore[liveViewingItem.id])}
+          neuronData={reconstructNeuronData(neuronWriterDataStore[liveViewingItem.id])}
+          factCheckV2={generatedContentsStore[liveViewingItem.id]?.factCheckV2 ?? null}
           onClose={() => setViewingItem(null)}
           onPrevious={handlePreviousItem}
           onNext={handleNextItem}
@@ -1694,7 +1696,8 @@ export function ReviewExport() {
             }
           }}
         />
-      )}
+        );
+      })()}
 
       {/* ── Bulk Publish Modal ── */}
       {showBulkPublishModal && (
