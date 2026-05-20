@@ -169,6 +169,7 @@ export function ReviewExport() {
     updateContentItem,
     removeContentItem,
     config,
+    setConfig,
     sitemapUrls,
     // Persisted stores - survives navigation!
     generatedContentsStore,
@@ -1156,6 +1157,21 @@ export function ReviewExport() {
             {isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5 fill-current" />}
             <span className="truncate">{isGenerating ? 'Forging…' : `Generate (${selectedItems.length})`}</span>
           </button>
+
+          {/* Phase 8 — opt-in 4-agent pipeline (single-article items only) */}
+          <label className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-zinc-300 cursor-pointer hover:bg-white/10 transition">
+            <input
+              type="checkbox"
+              checked={!!config.useAgentPipeline}
+              onChange={(e) => setConfig({ useAgentPipeline: e.target.checked })}
+              className="accent-primary"
+            />
+            <span>
+              <span className="font-semibold text-primary">Agent pipeline</span>{' '}
+              <span className="text-zinc-500">(experimental · single articles only)</span>
+            </span>
+          </label>
+
 
           {(publishableSelected.length > 0 || allPublishable.length > 0) && (
             <button
