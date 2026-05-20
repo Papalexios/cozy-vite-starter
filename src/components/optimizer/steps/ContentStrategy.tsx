@@ -1247,6 +1247,23 @@ export function ContentStrategy() {
         {/* ════════════════════════════════════════════════════════════════ */}
         {activeTab === "godmode" && <GodModeDashboard />}
 
+        {activeTab === "clusters" && (
+          <div className="space-y-4">
+            <SectionHeader
+              icon={Network}
+              title="Topical Cluster Planner"
+              subtitle="Generate a pillar + spokes with cosine-linked internal anchors (Phase 10)."
+              gradient="bg-gradient-to-br from-cyan-500/60 to-emerald-600/40"
+            />
+            <button
+              onClick={() => setClusterModalOpen(true)}
+              className="w-full px-6 py-4 bg-gradient-to-r from-cyan-600 to-emerald-600 text-white font-bold text-lg rounded-2xl hover:brightness-110 transition-all shadow-lg flex items-center justify-center gap-3"
+            >
+              <Sparkles className="w-5 h-5" /> Open Cluster Planner
+            </button>
+          </div>
+        )}
+
         {/* ════════════════════════════════════════════════════════════════ */}
         {/* GAP ANALYSIS                                                    */}
         {/* ════════════════════════════════════════════════════════════════ */}
