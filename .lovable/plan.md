@@ -1,158 +1,64 @@
-# WP Content Optimizer PRO — Phased Upgrade Plan
 
-Stack stays: **Vite + React + Lovable Cloud (Supabase) + Cloudflare Pages Functions**. No Next.js/Nest/BullMQ rebuild. Postgres replaces Zustand-as-database. Edge functions + `pg_cron` replace Redis/BullMQ. We extend the existing `wordpress-publish` edge function instead of shipping a PHP plugin (revisit later if needed).
+# Blueprint Implementation Plan
 
-Each phase is shippable on its own. Don't start phase N+1 until N is verified in production.
+You picked all four scopes, keep current stack (Cloudflare Pages Functions + Supabase), and approved a pgvector cache. I'll ship this as four sequential phases (7→10) on top of the existing orchestrator, NOT as a rewrite. Nothing in Phases 1-6 gets thrown away.
 
----
+## Phase 7 — GEO: Information Gain Engine + Semantic Cache
 
-## Phase 1 — Database & Content Memory (foundation)
+**New files**
+- `migrations/004_phase7_semantic_cache.sql` — `pgvector` extension, `serp_cache` (keyword, embedding vector(1536), payload jsonb, fetched_at), `information_gain_runs` table, `match_serp_cache` RPC.
+- `src/lib/sota/geo/InformationGainEngine.ts` — orchestrates: SERP fetch (reuses `SERPAnalyzer`) → embed top-5 page chunks via Lovable AI Gateway (`google/gemini-embedding-001`, dims=1536) → embed draft outline → cosine-diff to surface blindspot topics, missing entities, contrarian angles.
+- `src/lib/sota/geo/embeddings.ts` — thin wrapper around `https://ai.gateway.lovable.dev/v1/embeddings` (server-side only via Cloudflare Function).
+- `functions/api/embed.ts` — Cloudflare Function proxy holding `LOVABLE_API_KEY`.
+- `src/lib/db/semanticCache.ts` — `getCachedSerp(keyword, threshold=0.92)` / `putCachedSerp` via Supabase RPC.
+- `src/components/optimizer/GenerativeLiftPanel.tsx` — mounted in `ReviewExport` (and per-article in `ContentViewerPanel`) showing blindspots, suggested entities, contrarian angles, "lift score" 0-100.
 
-Goal: every entity the optimizer touches is persisted, multi-site, RLS-protected.
+**Wiring**
+- New orchestrator phase **0b: Information Gain** (after SERP, before outline). Result attached to `GeneratedContent.metadata.informationGain`.
+- Cache: every SERP scrape + embedding run is keyed by keyword embedding; reuse when cosine ≥ 0.92 and `fetched_at` within 7 days.
 
-**Tables (Lovable Cloud / Supabase):**
-- `sites` — wp_url, name, app_password (encrypted), default_author, owner_id
-- `pages` — site_id, url, title, word_count, last_crawled_at, content_hash, health_score
-- `keywords` — site_id, page_id?, keyword, intent, target_position, source (manual/gsc/serp)
-- `content_jobs` — site_id, type (generate/refresh/godmode), status, config jsonb, error, timestamps
-- `drafts` — job_id, page_id?, title, html, meta_description, slug, quality_score jsonb, neuronwriter_query_id, model
-- `sources` — draft_id, url, title, domain, authority_score, verified_at, http_status
-- `internal_links` — draft_id, anchor, target_url, paragraph_index
-- `publish_logs` — draft_id, site_id, wp_post_id, wp_url, status, published_at, response jsonb
-- `revisions` — draft_id, version, html, diff_summary, created_at
-- `ranking_snapshots` — site_id, keyword_id, position, url, captured_at (daily)
-- `gsc_metrics` — site_id, page_url, query, impressions, clicks, ctr, position, date
+## Phase 8 — 4-Agent Pipeline Refactor
 
-**RLS:** every table scoped by `owner_id` via `sites.owner_id = auth.uid()`. Roles in separate `user_roles` table per house rules.
+Refactor `EnterpriseContentOrchestrator` into an explicit agent graph WITHOUT breaking existing phase numbers (agents wrap groups of phases).
 
-**Migration of existing flows:**
-- Replace Zustand `persist` for generations/godmode history with Supabase reads/writes (keep Zustand for ephemeral UI state only).
-- Wire `EnterpriseContentOrchestrator` final step → insert `drafts` + `sources` + `internal_links`.
-- Wire `wordpress-publish` edge function → insert `publish_logs` + create `revisions` row.
+- `src/lib/sota/agents/AgentTypes.ts` — `AgentContext`, `AgentResult<T>`, `AgentRunLog`.
+- `src/lib/sota/agents/ResearcherAgent.ts` — wraps Phase 0 (SERP) + 0b (Information Gain) + entity/PAA extraction + Wikidata sameAs lookup.
+- `src/lib/sota/agents/OutlineArchitectAgent.ts` — emits strict H2/H3 plan with AEO question headers + snippet-bait targets.
+- `src/lib/sota/agents/CopywriterAgent.ts` — section-by-section streaming; reuses Master Prompt v15.0 (Hormozi/Ferriss voice, AI-phrase ban).
+- `src/lib/sota/agents/CriticAgent.ts` — programmatic scorer (entity coverage %, snippet-bait conformance %, citation density, gap coverage). Returns rewrite directives per section.
+- `src/lib/sota/agents/AgentRunner.ts` — Critic→Copywriter loop, max 3 cycles, target score ≥95.
+- `src/lib/sota/EnterpriseContentOrchestrator.ts` — replace inline phase calls with `AgentRunner.run({ researcher, architect, copywriter, critic })`. Existing self-critique (Phase 7) becomes part of CriticAgent.
+- UI: `GenerationProgressModal` shows active agent + cycle count.
 
-**Acceptance:** sign in → see all sites/drafts/publishes across devices; nothing lost on reload.
+## Phase 9 — AEO: Snippet-Bait Linter + Deep JSON-LD @graph
 
----
+- `src/lib/sota/aeo/snippetBaitLinter.ts` — for every H2/H3 that is a question, verify the next paragraph is 40-60 words, starts with an absolute definition ("X is…" / "To do Y…"), has no ambiguous pronouns. Emits `LintIssue[]` with severity.
+- `src/lib/sota/aeo/snippetBaitFixer.ts` — auto-rewrite failing baits via Lovable AI Gateway in CriticAgent.
+- `src/components/optimizer/AEOLinterPanel.tsx` — live panel in `ContentViewerPanel` with click-to-jump highlights (reuses the per-claim highlight pattern from Phase 4).
+- `src/lib/sota/SchemaGenerator.ts` — extend to emit nested `@graph` with `WebSite`, `Organization`, `Person` (author with `sameAs` socials from AuthorProfiles), `TechArticle`/`Article`, `FAQPage`, `BreadcrumbList`, and `about: [{ @type: Thing, sameAs: <wikidata> }]` Entity Mentions from ResearcherAgent.
+- Validate against schema.org JSON-LD shapes; render in `ReviewExport` Schema tab.
 
-## Phase 2 — Real SEO Data (GSC + sitemap grounding)
+## Phase 10 — Topical Cluster Visualizer (ReactFlow)
 
-Goal: kill model-guessed search volume. Every keyword recommendation is grounded in real signals.
+- `bun add reactflow`
+- `migrations/005_phase10_clusters.sql` — `topic_clusters`, `cluster_nodes` (id, cluster_id, kind: 'pillar'|'spoke', title, target_keyword, status, draft_id FK).
+- `src/lib/sota/clusters/ClusterPlanner.ts` — given a root topic, generate 1 pillar + 10 spokes via Lovable AI Gateway with strict JSON schema output.
+- `src/lib/sota/clusters/LinkMatrix.ts` — extends existing `SOTAInternalLinkEngine` to auto-resolve spoke↔pillar↔sibling anchors using cosine similarity over cluster-scoped embeddings (reuses Phase 7 cache).
+- `src/components/optimizer/cluster/ClusterCanvas.tsx` — ReactFlow node tree, click node → opens article workstation (reuses existing `ContentViewerPanel` flow).
+- `src/components/optimizer/cluster/ClusterPlannerModal.tsx` — root-topic input + generate button.
+- New nav entry under Strategy step.
 
-- **Google Search Console** connector (already available). Daily edge function (`pg_cron`) pulls `searchanalytics/query` per site → `gsc_metrics` table. Backfill 16 months on first connect.
-- **Sitemap crawl** (existing `crawlSitemap`) → upsert `pages` + `content_hash`. Diff detects changed/stale pages.
-- **PageSpeed Insights** edge function on demand → store CWV per page.
-- **SERP grounding**: existing `SERPAnalyzer` results persisted to `keywords.serp_snapshot` so we don't re-fetch.
-- **Optional later**: DataForSEO/Semrush adapters behind a `KeywordDataProvider` interface.
+## Cross-cutting
 
-**UI:** Dashboard widget — "Top GSC opportunities" (high impressions + low CTR + position 5–15). Click → seed a content job.
+- All embedding/LLM calls go through Cloudflare Function or Supabase Edge Function — never client-side (keeps `LOVABLE_API_KEY` server-only).
+- All four phases write into `mem://features/...` after completion and update `mem://index.md`.
+- Existing Phase 1-6 surfaces (Content Memory, GSC, Job Queue, Fact-Check, WP Publisher, Feedback Loop) are untouched.
 
-**Acceptance:** keyword picker shows real impressions/clicks/position from GSC, not model estimates.
+## Manual actions you'll need to take
 
----
+1. Run migrations 004 + 005 in Supabase SQL editor (I'll provide the files).
+2. Confirm `LOVABLE_API_KEY` is set as a Cloudflare Pages environment variable for the new `/api/embed` function (it's already in Supabase secrets for existing functions).
 
-## Phase 3 — Server-side Pipeline + Job Queue (lite)
+## Execution order
 
-Goal: long generations survive browser refresh; God Mode runs without the tab open.
-
-- New edge function `content-job-runner` invoked by `pg_cron` every minute. Picks `content_jobs` where `status='queued'`, claims with `FOR UPDATE SKIP LOCKED`, runs orchestrator phases server-side, updates `status` + `progress` jsonb.
-- Orchestrator phases (already standardized 0-9b) become idempotent steps; each writes intermediate state so a crashed job resumes.
-- Browser polls `content_jobs` row via Supabase realtime → live progress UI (no more stuck modals).
-- Retry/backoff (already in code) moves to runner.
-- Cancel button sets `status='cancelling'`; runner checks between phases.
-
-**Acceptance:** start a 6k-word generation, close the tab, come back in 10 min — draft is in DB.
-
----
-
-## Phase 4 — Fact-Checking & Source Verification
-
-Goal: every factual claim has a verified citation; YMYL gets stricter rules.
-
-Builds on existing `AuthoritativeSourceGate` + `ReferenceService`.
-- **Claim extractor** (LLM call): split draft into atomic claims, tag `factual | opinion | definitional`.
-- **Evidence binder**: each factual claim must map to ≥1 `sources` row with HTTP-verified URL + domain on whitelist OR live-verified.
-- **YMYL mode** (auto-detected from keyword/category): require ≥2 sources per claim, block publish if any unverified.
-- **Freshness check**: source `last_modified` < 24mo for time-sensitive topics.
-- **Hallucination flags** in Review UI: unsupported claims highlighted in red, user must approve or remove before publish.
-
-**Acceptance:** publishing a draft with unsupported YMYL claim is blocked with actionable diff.
-
----
-
-## Phase 5 — WordPress Publisher Upgrade (no plugin)
-
-Extend existing `supabase/functions/wordpress-publish`:
-- Featured image upload to Media Library (`/wp/v2/media`) with alt/title/caption.
-- Categories/tags upsert by name → ID resolution.
-- Yoast (`_yoast_wpseo_*`) and Rank Math (`rank_math_*`) meta via REST `meta` field (requires App Password user with `edit_posts` + meta exposure — document fallback).
-- Canonical URL + custom excerpt + author mapping.
-- Schema injected as Gutenberg `core/html` block at top.
-- Scheduled publish via `status=future` + `date`.
-- Rollback: re-PUT previous `revisions.html` by version.
-
-**Acceptance:** one click publishes with featured image, Yoast title/desc, categories, schema, canonical — verified in WP admin.
-
----
-
-## Phase 6 — Performance Feedback Loop (the moat)
-
-Requires Phases 1–2.
-- **Decay detector**: weekly job compares `ranking_snapshots` 28-day vs prior 28-day → flag drops ≥3 positions or impressions ≥20% down.
-- **CTR opportunity**: GSC position 1–10 with CTR < expected curve → flag for title/meta rewrite.
-- **Cannibalization**: same query ranking 2+ URLs on same site → flag merge/canonical.
-- **Refresh calendar**: scored backlog of pages to rewrite, surfaced on dashboard.
-- **Before/after**: 28 days post-publish, attach `ranking_snapshots` + `gsc_metrics` deltas to the `publish_logs` row → "ROI" card per draft.
-- **Topical authority score** per site: coverage of entity graph vs top competitors.
-
-**Acceptance:** dashboard shows "5 pages decayed this week" + "republishing post X gained +12 positions, +340 clicks/mo".
-
----
-
-## Phase 7 — Schema Strategy Hardening
-
-- Schema type chosen by content-type heuristics: evergreen → `BlogPosting`/`Article`, news → `NewsArticle`, recipe/howto → `HowTo`, product → `Product`. No more blanket `NewsArticle`.
-- FAQPage emitted only when site is in allowed verticals (gov/health/etc.) OR user opts in with warning.
-- Validate against Google Rich Results Test API in Review step; show errors before publish.
-
----
-
-## Phase 8 — Testing & CI Hardening
-
-CI already exists (`.github/workflows/ci.yml`). Add:
-- Vitest contract tests for each orchestrator phase (fixtures in/out).
-- Schema snapshot tests per content type.
-- Prompt regression tests (golden output diff threshold).
-- Playwright E2E: setup → strategy → review → publish (mock WP).
-- Mock WP server for publisher tests.
-- Dependency + secret scanning (already partly via `npm audit`).
-
----
-
-## Sequencing & dependencies
-
-```text
-Phase 1 (DB) ──┬─► Phase 3 (Job runner)
-               ├─► Phase 2 (GSC) ──► Phase 6 (Feedback loop)
-               └─► Phase 5 (WP publisher upgrade)
-Phase 4 (Fact-check) parallel to 3, depends on 1.
-Phase 7 (Schema) parallel any time after 1.
-Phase 8 (CI) parallel throughout.
-```
-
-Estimated effort (rough, single agent):
-- P1: 1 session  ·  P2: 1 session  ·  P3: 1–2 sessions  ·  P4: 1–2 sessions
-- P5: 1 session  ·  P6: 2 sessions  ·  P7: 0.5 session  ·  P8: 1 session
-
----
-
-## What I will NOT do (per your earlier answers)
-
-- No Next.js / NestJS / BullMQ / Redis rebuild.
-- No PHP WordPress plugin (extend edge function instead).
-- No new third-party paid SEO API as a hard dependency (GSC is free; SERP/Semrush stay optional behind interface).
-
----
-
-## Approve to start
-
-Reply **"start phase 1"** (or pick another) and I'll execute that phase only — schema migration, RLS, wiring existing flows to persist. Everything else waits.
+I'll ship one phase per turn so each is reviewable and testable. **Starting with Phase 7 next turn unless you want a different order.**
