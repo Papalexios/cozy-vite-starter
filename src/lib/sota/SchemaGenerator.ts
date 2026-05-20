@@ -37,11 +37,17 @@ export class SchemaGenerator {
   private organizationName: string;
   private organizationUrl: string;
   private logoUrl: string;
+  private organizationSameAs: string[] = [];
 
   constructor(organizationName: string, organizationUrl: string, logoUrl: string = '') {
     this.organizationName = organizationName;
     this.organizationUrl = organizationUrl;
     this.logoUrl = logoUrl;
+  }
+
+  /** Phase 9 — populate Organization.sameAs with social/profile URLs. */
+  setOrganizationSameAs(urls: string[]): void {
+    this.organizationSameAs = (urls || []).filter((u) => /^https?:\/\//i.test(u));
   }
 
   generateComprehensiveSchema(content: GeneratedContent, url: string): SchemaMarkup {
@@ -119,7 +125,7 @@ export class SchemaGenerator {
           'caption': this.organizationName
         }
       }),
-      'sameAs': [] // Can be populated with social profiles
+      'sameAs': this.organizationSameAs,
     };
   }
 
