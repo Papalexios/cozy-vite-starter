@@ -1862,12 +1862,26 @@ OUTPUT: Return ONLY the title string. No JSON, no quotes, no explanation, no mar
 
     this.log('✅ All phases complete. Assembling final result...');
 
+    // Self-heal: ensure final HTML is wrapped in a single <article> tag.
+    // Models occasionally return valid long-form HTML without the outer wrapper;
+    // wrapping is presentation-only and must not block enterprise output.
+    if (!/<article\b/i.test(html) || !/<\/article>/i.test(html)) {
+      this.log('Final HTML missing <article> wrapper — auto-wrapping before validation.');
+      html = `<article>\n${html.trim()}\n</article>`;
+    }
+
     const wordCount = html.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
     const h2Count = (html.match(/<h2\b/gi) || []).length;
     const paragraphCount = (html.match(/<p\b/gi) || []).length;
-    if (wordCount < MIN_ENTERPRISE_WORD_COUNT || html.length < MIN_VALID_CONTENT_LENGTH || h2Count < 5 || paragraphCount < 10 || !/<article\b/i.test(html) || !/<\/article>/i.test(html)) {
-      throw new Error(`INCOMPLETE_ARTICLE: Final output failed enterprise completeness checks (${wordCount} words, ${html.length} chars, ${h2Count} H2s, ${paragraphCount} paragraphs). Nothing was saved.`);
+    const failures: string[] = [];
+    if (wordCount < MIN_ENTERPRISE_WORD_COUNT) failures.push(`words ${wordCount}<${MIN_ENTERPRISE_WORD_COUNT}`);
+    if (html.length < MIN_VALID_CONTENT_LENGTH) failures.push(`chars ${html.length}<${MIN_VALID_CONTENT_LENGTH}`);
+    if (h2Count < 5) failures.push(`h2 ${h2Count}<5`);
+    if (paragraphCount < 10) failures.push(`p ${paragraphCount}<10`);
+    if (failures.length) {
+      throw new Error(`INCOMPLETE_ARTICLE: Final output failed enterprise completeness checks (${failures.join(', ')}). Nothing was saved. Retry with a stronger model.`);
     }
+    this.log(`Enterprise validation ✅ ${wordCount} words, ${h2Count} H2s, ${paragraphCount} paragraphs, ${html.length} chars.`);
 
     return {
       id: crypto.randomUUID(),
