@@ -596,7 +596,70 @@ export function ReviewExport() {
         let currentStepIdx = 0;
         const stepIds = ['research', 'videos', 'references', 'outline', 'content', 'enhance', 'links', 'validate', 'schema'];
 
-        const result = await orchestrator.generateContent({
+        // ── Phase 8 opt-in: route SINGLE-article items through AgentRunner ──
+        const useAgents = !!config.useAgentPipeline && item.type === 'single';
+        let result: any;
+        if (useAgents) {
+          setAgentEvents([]);
+          setShowAgentModal(true);
+          const runner = createAgentRunner({
+            plan: {
+              keyword: item.primaryKeyword,
+              title: item.title,
+              targetAudience: item.pipelineConfig?.targetAudience,
+              tone: item.pipelineConfig?.tone as any,
+              targetWordCount: item.pipelineConfig?.targetWordCount || 2200,
+            },
+            apiKeys: {
+              geminiApiKey: config.geminiApiKey,
+              openaiApiKey: config.openaiApiKey,
+              anthropicApiKey: config.anthropicApiKey,
+              openrouterApiKey: config.openrouterApiKey,
+              groqApiKey: config.groqApiKey,
+              openrouterModelId: config.openrouterModelId,
+              groqModelId: config.groqModelId,
+            } as any,
+            model: config.primaryModel as any,
+            serperKey: config.serperApiKey,
+            sitePages,
+            onProgress: (ev) => {
+              setAgentEvents(prev => [...prev, ev]);
+              setGenerationLog(prev => {
+                const next = [...prev, { t: ev.timestamp, msg: `[${ev.agent}] ${ev.message}`, level: ev.status === 'error' ? 'error' as const : 'info' as const }];
+                return next.length > 200 ? next.slice(-200) : next;
+              });
+              setGeneratingItems(prev => prev.map(gi =>
+                gi.id === item.id ? { ...gi, progress: Math.min(95, gi.progress + 8), currentStep: `[${ev.agent}] ${ev.message}` } : gi
+              ));
+            },
+          }, { minScore: 92, maxCritiquePasses: 3, maxRewriteCycles: 1 });
+
+          const agentResult = await runner.run();
+          const wordCount = agentResult.draft.wordCount;
+          // Adapt AgentRunResult → orchestrator result shape used by downstream contentToStore
+          result = {
+            id: `agent-${Date.now()}-${item.id}`,
+            title: agentResult.outline.title,
+            seoTitle: agentResult.outline.title,
+            content: agentResult.critique.html || agentResult.draft.html,
+            metaDescription: agentResult.outline.metaDescription,
+            slug: item.primaryKeyword.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+            primaryKeyword: item.primaryKeyword,
+            secondaryKeywords: [],
+            metrics: { wordCount, sentenceCount: Math.round(wordCount / 15), paragraphCount: Math.round(wordCount / 100), headingCount: agentResult.outline.outline.length, imageCount: 0, linkCount: 0, keywordDensity: 1.5, readabilityGrade: 7, estimatedReadTime: Math.ceil(wordCount / 200) },
+            qualityScore: { overall: agentResult.critique.finalScore, readability: agentResult.critique.finalScore, seo: agentResult.critique.finalScore, eeat: agentResult.critique.finalScore, uniqueness: agentResult.critique.finalScore, factAccuracy: agentResult.critique.finalScore, passed: agentResult.critique.finalScore >= 92, improvements: agentResult.critique.notes },
+            internalLinks: [],
+            schema: { '@context': 'https://schema.org', '@graph': [] },
+            serpAnalysis: agentResult.research.serp || undefined,
+            neuronWriterQueryId: undefined,
+            neuronWriterAnalysis: undefined,
+            generatedAt: new Date(),
+            model: config.primaryModel,
+            checklist: undefined,
+          };
+          setShowAgentModal(false);
+        } else {
+        result = await orchestrator.generateContent({
           keyword: item.primaryKeyword,
           title: item.title,
           contentType: item.type,
@@ -741,6 +804,8 @@ export function ReviewExport() {
             ));
           },
         });
+        }
+
 
         // Mark all steps complete
         setGenerationSteps(prev => prev.map(s => ({ ...s, status: 'completed' })));
