@@ -588,6 +588,42 @@ export class SchemaGenerator {
     return `<script type="application/ld+json">${JSON.stringify(schema, null, 2)}</script>`;
   }
 
+  /**
+   * Phase 9 — deeper @graph: append DefinedTerm/Thing nodes for each entity
+   * and add `mentions` references on the Article node so AI engines can
+   * resolve named entities directly.
+   */
+  enrichGraphWithEntityMentions(schema: SchemaMarkup, entities: string[], pageUrl: string): SchemaMarkup {
+    if (!schema || !Array.isArray(schema['@graph']) || !entities?.length) return schema;
+    const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const unique = Array.from(new Set(entities.map((e) => (e || '').trim()).filter((e) => e.length >= 3))).slice(0, 25);
+    if (!unique.length) return schema;
+
+    const thingNodes = unique.map((name) => ({
+      '@type': 'DefinedTerm',
+      '@id': `${pageUrl}/#/term/${slug(name)}`,
+      'name': name,
+      'inDefinedTermSet': {
+        '@id': `${pageUrl}/#topic-vocabulary`,
+      },
+    }));
+
+    const article = (schema['@graph'] as any[]).find((n) => n['@type'] === 'Article' || n['@type'] === 'TechArticle');
+    if (article) {
+      article.mentions = unique.map((name) => ({ '@id': `${pageUrl}/#/term/${slug(name)}` }));
+    }
+
+    (schema['@graph'] as any[]).push({
+      '@type': 'DefinedTermSet',
+      '@id': `${pageUrl}/#topic-vocabulary`,
+      'name': 'Topic vocabulary',
+      'hasDefinedTerm': unique.map((name) => ({ '@id': `${pageUrl}/#/term/${slug(name)}` })),
+    });
+    (schema['@graph'] as any[]).push(...thingNodes);
+
+    return schema;
+  }
+
   // Validate schema against Google's requirements
   validateSchema(schema: SchemaMarkup): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
