@@ -33,15 +33,26 @@ function countPlainWords(html: string): number {
 }
 
 function assertEnterpriseArticleComplete(result: any): void {
-  const html = String(result?.content || '').trim();
+  let html = String(result?.content || '').trim();
+  // Self-heal: wrap stray HTML in <article> instead of failing the whole run.
+  if (html && (!/<article\b/i.test(html) || !/<\/article>/i.test(html))) {
+    html = `<article>\n${html}\n</article>`;
+    if (result && typeof result === 'object') result.content = html;
+  }
   const wordCount = Number(result?.metrics?.wordCount || countPlainWords(html));
-  const hasArticle = /<article\b/i.test(html) && /<\/article>/i.test(html);
   const h2Count = (html.match(/<h2\b/gi) || []).length;
   const paragraphCount = (html.match(/<p\b/gi) || []).length;
 
-  if (!html || html.length < MIN_ENTERPRISE_ARTICLE_CHARS || wordCount < MIN_ENTERPRISE_ARTICLE_WORDS || !hasArticle || h2Count < 5 || paragraphCount < 10) {
+  const failures: string[] = [];
+  if (!html) failures.push('empty');
+  if (html.length < MIN_ENTERPRISE_ARTICLE_CHARS) failures.push(`chars ${html.length}<${MIN_ENTERPRISE_ARTICLE_CHARS}`);
+  if (wordCount < MIN_ENTERPRISE_ARTICLE_WORDS) failures.push(`words ${wordCount}<${MIN_ENTERPRISE_ARTICLE_WORDS}`);
+  if (h2Count < 5) failures.push(`h2 ${h2Count}<5`);
+  if (paragraphCount < 10) failures.push(`p ${paragraphCount}<10`);
+
+  if (failures.length) {
     throw new Error(
-      `INCOMPLETE_ARTICLE: Generated output failed enterprise completeness checks (${wordCount} words, ${html.length} chars, ${h2Count} H2s, ${paragraphCount} paragraphs). The draft was not saved. Retry with a stronger model or configured fallback.`
+      `INCOMPLETE_ARTICLE: Generated output failed enterprise completeness checks (${failures.join(', ')}). The draft was not saved. Retry with a stronger model or configured fallback.`
     );
   }
 }
