@@ -380,8 +380,8 @@ const Status = () => {
     const sb = getSupabaseClient();
     if (!sb) return { status: "error", message: "Supabase client unavailable." };
     try {
-      const { result, latencyMs } = await timed(() =>
-        sb.from(table).select("*", { count: "exact", head: true }).limit(1)
+      const { result, latencyMs } = await timed(async () =>
+        await sb.from(table).select("*", { count: "exact", head: true }).limit(1)
       );
       const { error, count } = result as any;
       if (error) {
