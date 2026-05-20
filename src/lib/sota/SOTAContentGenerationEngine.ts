@@ -475,12 +475,6 @@ export class SOTAContentGenerationEngine {
     let lastError: unknown;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      if (attempt > 0) {
-        const backoffMs = Math.min(1500 * Math.pow(2, attempt), 12000);
-        this.log(`Retrying ${model} (attempt ${attempt + 1}/${maxRetries + 1}) after ${backoffMs}ms...`);
-        await this.sleep(backoffMs);
-      }
-
       const startTime = Date.now();
       try {
         let providerResult: ProviderCallResult = { content: '', tokens: 0 };
@@ -525,26 +519,29 @@ export class SOTAContentGenerationEngine {
         if (msg.includes('USER_ABORT') || this.masterAbort.signal.aborted) throw error;
         // Slow-throughput abort → skip retrying the same slow model, jump to fallbacks.
         if (msg.includes('SLOW_MODEL')) break;
-        if (attempt < maxRetries && this.isRetryableError(error)) continue;
+        if (attempt < maxRetries && this.isRetryableError(error)) {
+          const backoffMs = this.retryDelayMs(error, attempt + 1);
+          this.log(`Retrying ${model} (attempt ${attempt + 2}/${maxRetries + 1}) after ${Math.round(backoffMs / 1000)}s...`);
+          await this.sleep(backoffMs);
+          continue;
+        }
         break;
       }
     }
 
-    // STRICT MODEL POLICY: Only use fallbacks the user EXPLICITLY configured.
-    // Never silently switch to another provider/model — that burns user credits
-    // on models they did not choose. If the user picked e.g. a free OpenRouter
-    // model, we must respect that choice and fail loudly instead of falling
-    // back to a paid model behind their back.
-    const fallbackModels = Array.from(new Set((this.apiKeys.fallbackModels || []) as string[]));
-    if (fallbackModels.length === 0) {
-      this.log(`Strict model policy: no user-defined fallbacks. Failing on ${model} instead of switching providers.`);
-    }
+    // Long-form enterprise articles must complete. First use explicit fallbacks,
+    // then escalate to any configured SOTA-capable provider instead of leaving
+    // the UI stuck with "not generated" after a weak/free route stalls.
+    const configuredFallbacks = Array.from(new Set((this.apiKeys.fallbackModels || []) as string[]));
+    const fallbackModels = Array.from(new Set([
+      ...configuredFallbacks,
+      ...(requiresLongFormArticle(params) ? this.automaticFallbacks(model, config.modelId) : []),
+    ]));
     if (fallbackModels.length > 0) {
       for (const fallbackEntry of fallbackModels) {
-        const colonIdx = fallbackEntry.indexOf(':');
-        const fallbackProvider = (colonIdx > 0 ? fallbackEntry.substring(0, colonIdx) : fallbackEntry) as AIModel;
-        const fallbackModelId = colonIdx > 0 ? fallbackEntry.substring(colonIdx + 1) : undefined;
-        if (!DEFAULT_MODEL_CONFIGS[fallbackProvider]) continue;
+        const parsed = parseFallbackEntry(fallbackEntry);
+        if (!parsed) continue;
+        const { provider: fallbackProvider, modelId: fallbackModelId } = parsed;
 
         const activeModelId = (this.modelConfigs[model] || DEFAULT_MODEL_CONFIGS[model])?.modelId;
         if (fallbackProvider === model && (!fallbackModelId || fallbackModelId === activeModelId)) continue;
@@ -565,7 +562,8 @@ export class SOTAContentGenerationEngine {
             };
           }
           return await this.generateWithModel({ ...params, model: fallbackProvider });
-        } catch {
+        } catch (fallbackError) {
+          lastError = fallbackError;
           continue;
         } finally {
           if (fallbackModelId && previousConfig) this.modelConfigs[fallbackProvider] = previousConfig;
