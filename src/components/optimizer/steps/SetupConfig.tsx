@@ -316,8 +316,7 @@ export function SetupConfig() {
       setShowCustomOpenRouter(true);
     } else {
       if (isUnsafeLongformOpenRouterModel(value)) {
-        toast.error('That OpenRouter model is blocked for full-length articles. Choose Claude, GPT-4o, Gemini, or another paid long-context model.');
-        return;
+        toast.warning('Heads up: this OpenRouter model often returns partial drafts for long-form articles. Saved anyway — switch to Claude/GPT-4o if you see truncation.');
       }
       setShowCustomOpenRouter(false);
       setConfig({ openrouterModelId: value });
@@ -337,8 +336,7 @@ export function SetupConfig() {
     if (customOpenRouterModel.trim()) {
       const modelId = customOpenRouterModel.trim();
       if (isUnsafeLongformOpenRouterModel(modelId)) {
-        toast.error('That OpenRouter model is blocked for full-length articles. Use anthropic/claude-3.5-sonnet or openai/gpt-4o instead.');
-        return;
+        toast.warning('Heads up: this OpenRouter model often returns partial drafts for long-form articles. Saved anyway.');
       }
       setConfig({ openrouterModelId: modelId });
     }

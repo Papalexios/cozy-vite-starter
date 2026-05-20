@@ -423,7 +423,7 @@ export class SOTAContentGenerationEngine {
 
     const config = (this.modelConfigs[model] || DEFAULT_MODEL_CONFIGS[model]) as ModelConfig;
     if (model === 'openrouter' && requiresLongFormArticle(params) && isUnsafeOpenRouterLongFormModel(config.modelId)) {
-      throw new Error(`MODEL_INCOMPATIBLE: openrouter/${config.modelId} is blocked for full-length article generation because it is a free/flash/community route that routinely returns partial drafts. Use ${OPENROUTER_LONGFORM_SAFE_MODEL}, OpenAI GPT-4o, Claude Sonnet, Gemini Flash, or add a stronger fallback in Setup.`);
+      this.log(`⚠️ openrouter/${config.modelId} is flagged as risky for full-length articles (free/flash route — may return partial drafts). Proceeding because the user explicitly selected it. Switch to ${OPENROUTER_LONGFORM_SAFE_MODEL} or GPT-4o if you see truncation.`);
     }
     const cacheKey = `${model}:${config.modelId}:${simpleHash(prompt)}:${simpleHash(systemPrompt || '')}`;
     const cached = generationCache.get<GenerationResult>(cacheKey);
