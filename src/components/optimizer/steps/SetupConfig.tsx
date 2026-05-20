@@ -1064,6 +1064,10 @@ export function SetupConfig() {
                 onClick={() => {
                   const modelId = fbShowCustom ? fbCustomModelId.trim() : fbModelId.trim();
                   if (!modelId) return;
+                  if (fbProvider === 'openrouter' && isUnsafeLongformOpenRouterModel(modelId)) {
+                    toast.error('That OpenRouter fallback is blocked for full-length articles. Add Claude, GPT-4o, Gemini, or another paid long-context model.');
+                    return;
+                  }
                   const entry = `${fbProvider}:${modelId}`;
                   if ((config.fallbackModels || []).includes(entry)) {
                     toast.error('This fallback model is already added.');
